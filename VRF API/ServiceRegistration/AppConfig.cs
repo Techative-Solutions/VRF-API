@@ -1,4 +1,5 @@
-﻿using VRF_API.Authentication;
+﻿using Microsoft.Extensions.Caching.Distributed;
+using VRF_API.Authentication;
 using VRF_API.Configuration;
 using VRF_API.Repository;
 using VRF_API.Services;
@@ -18,6 +19,12 @@ namespace VRF_API.ServiceRegistration
             // Register application services
             // services.AddScoped<IEmailService, EmailService>();
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IHomePageService, HomePageService>();
+            services.AddScoped<Log>();
+            services.AddScoped<IRequestContext, RequestContext>();
+            services.AddScoped<DbConnection>();
+            services.AddScoped<SessionManager>();
+
             return services;
         }
     }

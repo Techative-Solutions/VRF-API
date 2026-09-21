@@ -36,7 +36,7 @@ using VRF_API.ServiceRegistration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var logDirectory = builder.Configuration.GetValue<string>("Loggings:LogDirectory");
+var logDirectory = builder.Configuration.GetValue<string>("Loggings:Log");
 
 Directory.CreateDirectory(logDirectory); // Ensure the folder exists
 
@@ -84,6 +84,18 @@ builder.Services.AddHttpContextAccessor();
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddDistributedMemoryCache();
+
+builder.Services.AddSession(options =>
+{
+    //options.IdleTimeout = TimeSpan.FromMinutes(LogoffTime);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+
+    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
+});
 //builder.Services.AddScoped<SapConnection>();
 
 // ⭐ Register OdbcConnection dependency
@@ -114,6 +126,7 @@ app.UseCors(x => x
     .AllowAnyMethod()
     .AllowAnyHeader()
 );
+app.UseSession();
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
