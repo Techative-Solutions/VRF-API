@@ -49,7 +49,7 @@ Log.Logger = new LoggerConfiguration()
         retainedFileCountLimit: null
     )
     .CreateLogger();
-
+builder.Services.AddHttpClient();
 builder.Services.Configure<SapSettings>(
     builder.Configuration.GetSection("SapSettings"));
 builder.Services.Configure<LoginSettings>(
@@ -72,7 +72,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins("http://localhost:3001")
               .AllowAnyMethod()
               .AllowAnyHeader();
     });

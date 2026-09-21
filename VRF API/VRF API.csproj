@@ -19,9 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    
     <Reference Include="Sap.Data.Hana.v4.5">
-      <HintPath>..\..\..\..\..\..\Program Files (x86)\sap\hdbclient\ado.net\v4.5\Sap.Data.Hana.v4.5.dll</HintPath>
+      <HintPath>T:\NHFS\sap\Sap.Data.Hana.v4.5.dll</HintPath>
     </Reference>
   </ItemGroup>
 

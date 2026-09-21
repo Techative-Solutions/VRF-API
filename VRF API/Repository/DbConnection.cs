@@ -2,6 +2,7 @@
 using Sap.Data.Hana;
 using Serilog;
 using System.Data;
+using System.Data.Odbc;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -46,33 +47,29 @@ namespace VRF_API.Repository
 
             sDBName = _configuration["HanaSettings:DBName"];
 
-            sConstr =
-                $"Driver={{HDBODBC}};" +
-                $"UID={sDBUser};" +
-                $"PWD={sDBPwd};" +
-                $"DATABASENAME={sDBName};" +
-                $"SERVERNODE={sServer};";
+            sConstr = _configuration["ConnectionStrings:HanaOdbc"];
+            
         }
         public string GetSingleValue(string sQuery)
         {
             log.WriteToLogFile_Debug("[DBConnection] [GetSingleValue] [START] - Fetching single value", "GetSingleValue");
-            HanaConnection SAP_Con = null/* TODO Change to default(_) if this is not a reference type */;
+            OdbcConnection SAP_Con = null/* TODO Change to default(_) if this is not a reference type */;
             DataTable dt = new DataTable();
             string sSingleValue = string.Empty;
 
             try
             {
                 string SAP_Constr = sConstr;
-                SAP_Con = new HanaConnection(SAP_Constr);
+                SAP_Con = new OdbcConnection(SAP_Constr);
                 SAP_Con.Open();
-                HanaCommand SAP_Cmd = new HanaCommand();
+                OdbcCommand SAP_Cmd = new OdbcCommand();
                 SAP_Cmd.CommandType = CommandType.Text;
                 SAP_Cmd.CommandText = sQuery;
                 SAP_Cmd.Connection = SAP_Con;
                 SAP_Cmd.CommandTimeout = 0;
                 if (SAP_Con.State == ConnectionState.Closed)
                     SAP_Con.Open();
-                HanaDataAdapter SAP_da = new HanaDataAdapter();
+                OdbcDataAdapter SAP_da = new OdbcDataAdapter();
                 SAP_da.SelectCommand = SAP_Cmd;
                 SAP_da.Fill(dt);
 
