@@ -283,9 +283,8 @@ namespace VRF_API.Services
                 string state = "";
                 string pincode = "";
 
-                string sDocUrl = _configuration["DocUrl"] ?? "";
-                string sDocKey = _configuration["DocKey"] ?? "";
-
+                string sDocUrl = _configuration["Posting:DocUrl"] ?? "";
+                string sDocKey = _configuration["Posting:DocKey"] ?? "";
                 string docNo = "1";
 
                 if (docType == "PAN Card")
