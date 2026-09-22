@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 using RestSharp;
-using Sap.Data.Hana;
+
 using Serilog;
 using System.Data;
 using System.Data.Common;

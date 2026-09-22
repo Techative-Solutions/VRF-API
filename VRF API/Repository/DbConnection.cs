@@ -1,5 +1,4 @@
 ﻿using Microsoft.Data.SqlClient;
-using Sap.Data.Hana;
 using Serilog;
 using System.Data;
 using System.Data.Odbc;
@@ -101,22 +100,22 @@ namespace VRF_API.Repository
         {
             String sFuncName = "HanaExecuteQueryReturnDataTable";
             log.WriteToLogFile_Debug("[DBConnection] [ExecuteQueryForDataTable] [START] - Executing query for DataTable", sFuncName);
-            HanaConnection SAP_Con = null/* TODO Change to default(_) if this is not a reference type */;
+            OdbcConnection SAP_Con = null/* TODO Change to default(_) if this is not a reference type */;
             DataTable dt = new DataTable();
             try
             {
                 // log.WriteToLogFile_Debug("Starting the function", sFuncName);
                 string SAP_Constr = sConstr;
-                SAP_Con = new HanaConnection(SAP_Constr);
+                SAP_Con = new OdbcConnection(SAP_Constr);
                 SAP_Con.Open();
-                HanaCommand SAP_Cmd = new HanaCommand();
+                OdbcCommand SAP_Cmd = new OdbcCommand();
                 SAP_Cmd.CommandType = CommandType.Text;
                 SAP_Cmd.CommandText = sQuery;
                 SAP_Cmd.Connection = SAP_Con;
                 SAP_Cmd.CommandTimeout = 0;
                 if (SAP_Con.State == ConnectionState.Closed)
                     SAP_Con.Open();
-                HanaDataAdapter SAP_da = new HanaDataAdapter();
+                OdbcDataAdapter SAP_da = new OdbcDataAdapter();
                 SAP_da.SelectCommand = SAP_Cmd;
                 SAP_da.Fill(dt);
                 //log.WriteToLogFile_Debug("Completed the function successfully", sFuncName);
