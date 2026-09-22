@@ -30,6 +30,7 @@ namespace VRF_API.Services
         private readonly string _URL;
         private readonly SessionManager _sessionManager;
         private readonly Log log;
+        private readonly string sDBName;
         public HomePageService(IConfiguration configuration, OdbcConnection connection,IHttpContextAccessor httpContextAccessor, DbConnection _db, IRequestContext requestContext, SessionManager sessionManager, Log _log)
         {
             _configuration = configuration;
@@ -43,6 +44,7 @@ namespace VRF_API.Services
             db = _db;
             session = context.Session;
             _URL = _configuration.GetValue<string>("AppSettings:LoginURL") ?? string.Empty;
+            sDBName = _configuration["HanaSettings:DBName"];
             _sessionManager = sessionManager;
             log = _log;
         }
@@ -56,11 +58,11 @@ namespace VRF_API.Services
             {
                 _sessionManager.Set("GSTNumber", gstNumber);
                 _sessionManager.Set("IsDraft", "Y");
-                string query = "select 'Y' from TEC_OLED where \"GstNo\" = '" + _sessionManager.Get("GSTNumber").ToString() + "'";
+                string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '" + _sessionManager.Get("GSTNumber").ToString() + "'";
                 string isExist = db.GetSingleValue(query);
-                string query1 = "select 'Y' from TEC_OLED where \"GstNo\" = '" + _sessionManager.Get("GSTNumber").ToString() + "' and ifnull(\"Draft\",'N')='N'";
+                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '" + _sessionManager.Get("GSTNumber").ToString() + "' and ifnull(\"Draft\",'N')='N'";
                 string isExist1 = db.GetSingleValue(query1);
-                string ReApplySts = db.GetSingleValue("Select 'N' from \"ApprovalTrace\" where  \"GstNo\"='" + _sessionManager.Get("GSTNumber").ToString() + "' and \"ReApplySts\"='No' ");
+                string ReApplySts = db.GetSingleValue($@"Select 'N' from ""{sDBName}"".""ApprovalTrace"" where  ""GstNo""='" + _sessionManager.Get("GSTNumber").ToString() + "' and \"ReApplySts\"='No' ");
                 log.WriteToLogFile_Debug($"Checks: isExist=" + isExist + ", isExist1=" + isExist1 + ", ReApplySts=" + ReApplySts, functionName);
                 if (ReApplySts == "N")
                 {
@@ -71,7 +73,7 @@ namespace VRF_API.Services
                 if (isExist1 == "Y")
                 {
                     string LiveDb = _configuration.GetValue<string>("HanaSettings:DBName_Live") ?? "";
-                    string gstNew = db.GetSingleValue("select \"CardCode\" from " + LiveDb + ".CRD1 where  \"GSTRegnNo\" = '" + gstNumber + "'");
+                    string gstNew = db.GetSingleValue($@"select ""CardCode"" from " + LiveDb + ".CRD1 where  \"GSTRegnNo\" = '" + gstNumber + "'");
                     log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [FLOW] - Live DB card code: " + gstNew, "btnHiddenSearch_Click");
                     if (gstNew != null && gstNew != "")
                     {
