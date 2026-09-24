@@ -85,7 +85,7 @@ namespace VRF_API.Services
                     else
                     {
                         log.WriteToLogFile_Debug("Validation Failed - GST already submitted, card code not found on live", functionName);
-                        _sessionManager.Set("GSTNumber", null);
+                        _sessionManager.Set("GSTNumber", "");
                         return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GST Number is already submitted",null);
                         
                     }
@@ -100,7 +100,7 @@ namespace VRF_API.Services
                 else
                 {
                     log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [VALIDATION_FAILED] - Entered GSTNo is Invalid: " + gstNumber, functionName);
-                    _sessionManager.Set("GSTNumber", null);
+                    _sessionManager.Set("GSTNumber", "");
                     return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GSTNo is invalid",null);                 
                 }
             }
