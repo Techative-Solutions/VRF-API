@@ -19,6 +19,7 @@ namespace VRF_API.ServiceRegistration
             // Register application services
             // services.AddScoped<IEmailService, EmailService>();
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IVendorCreationService, VendorCreationService>();
             services.AddScoped<IHomePageService, HomePageService>();
             services.AddScoped<Log>();
             services.AddScoped<IRequestContext, RequestContext>();
