@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Hosting.Server;
+﻿using DinkToPdf;
+using DinkToPdf.Contracts;
+using Microsoft.AspNetCore.Hosting.Server;
 using Newtonsoft.Json;
 using RestSharp;
 using Sap.Data.Hana;
@@ -8,8 +10,8 @@ using System.Data;
 using System.Data.Common;
 using System.Data.Odbc;
 using System.Net.Mail;
-using System.Net;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -37,6 +39,8 @@ namespace VRF_API.Services
         Task<bool> VerifyOTP(VerifyOtpRequest request);
         Task<bool> SendOTP(SendOtpRequest request);
         Task<SubmitVendorResult> SubmitVendor(SubmitVendorRequest request);
+        Task<(bool Success, string Message)> SaveNewProductAsync(
+           SaveRequest request);
     }
     public class VendorCreationService : IVendorCreationService
     {
@@ -56,7 +60,8 @@ namespace VRF_API.Services
         private readonly Log log;
         private readonly string dbName;
         private readonly string sDBName;
-        public VendorCreationService(IConfiguration configuration, OdbcConnection connection, IHttpContextAccessor httpContextAccessor, DbConnection _db, IRequestContext requestContext, SessionManager sessionManager, Log _log)
+        private readonly IConverter _converter;
+        public VendorCreationService(IConverter converter,IConfiguration configuration, OdbcConnection connection, IHttpContextAccessor httpContextAccessor, DbConnection _db, IRequestContext requestContext, SessionManager sessionManager, Log _log)
         {
             _configuration = configuration;
             _baseUrl = _configuration.GetValue<string>("SAPApiUrl:CusCreationUrl") ?? "";
@@ -72,6 +77,7 @@ namespace VRF_API.Services
             _sessionManager = sessionManager;
             log = _log;
             sDBName = _configuration["HanaSettings:DBName"];
+            _converter = converter;
             dbName = _configuration.GetValue<string>("HanaSettings:DBName");
         }
         public async Task<bool> SendOTP(SendOtpRequest request)
@@ -412,12 +418,12 @@ namespace VRF_API.Services
                     id,
                     model.OtherBusinessLocations);
 
-                // Your React request currently uses PartnerDetails.
+                // React: formData.businessPartners -> TEC_LED2
                 await SubmitInsertPartnerDetails(
                     connection,
                     transaction,
                     id,
-                    model.PartnerDetails);
+                    model.BusinessPartners);
 
                 await SubmitInsertOperationalContacts(
                     connection,
@@ -441,7 +447,7 @@ namespace VRF_API.Services
                     connection,
                     transaction,
                     id,
-                    model.OtherBusinessLocations);
+                    model.OtherInformation);
 
                 await SubmitInsertDocuments(
                     connection,
@@ -458,7 +464,7 @@ namespace VRF_API.Services
 
                 try
                 {
-                    //await SentMail(email, "");
+                    await SentMail(request.FormData,email, request.FormData.PaymentDetails.AgencyEmail);
                 }
                 catch (Exception mailEx)
                 {
@@ -494,256 +500,1424 @@ namespace VRF_API.Services
             }
         }
 
+        private async Task SentMail(
+    FormDataModel formData,
+    string toMail,
+    string agentMail)
+        {
+            try
+            {
+                // ============================================================
+                // 1. VALIDATE FORM DATA
+                // ============================================================
 
-    //    private async Task<bool> SentMail(
-    //string toMail,
-    //string agentMail,
-    //FormDataModel model)
-    //    {
-    //        const string functionName = "SentMail";
+                if (formData == null)
+                {
+                    throw new Exception("Form data is missing.");
+                }
 
-    //        try
-    //        {
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] [START] - Building vendor mail",
-    //                functionName);
+                log.WriteToLogFile_Debug(
+                    "Build Preview started",
+                    "Mail"
+                );
 
-    //            if (model == null)
-    //            {
-    //                log.WriteToLogFile_Debug(
-    //                    "[VendorCreation] [SentMail] [ERROR] - Form data is null",
-    //                    functionName);
+                // ============================================================
+                // 2. BUILD PREVIEW DATA FROM FORM DATA
+                // ============================================================
 
-    //                return false;
-    //            }
+                var data = new Dictionary<string, object>();
 
-    //            // ============================================================
-    //            // BUILD MAIL DATA
-    //            // ============================================================
+                data["Trade Name"] =
+                    formData.TradeName ?? "";
 
-    //            string vendorName = model.TradeName ?? "";
+                data["Billing Address"] =
+                    formData.BillingAddress?.Address1 ?? "";
 
-    //            // In Web Forms this came from:
-    //            // BuildPreviewData()
-    //            //
-    //            // In API we directly use FormDataModel instead of Session.
-    //            Dictionary<string, object> data = BuildPreviewData(model);
+                data["Registered Address"] =
+                    formData.RegisteredOffice?.Address1 ?? "";
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] - Preview data completed",
-    //                functionName);
+                data["Nature of Business"] =
+                    formData.NatureOfBusiness ?? "";
 
-    //            // ============================================================
-    //            // GOODS
-    //            // ============================================================
+                data["Mobile Number"] =
+                    formData.MobileNumber ?? "";
 
-    //            var goodsList = model.MajorGoodsServices ?? new List<object>();
+                data["Office Telephone"] =
+                    formData.OfficeTelephoneNo ?? "";
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] - Goods collected: " +
-    //                goodsList.Count,
-    //                functionName);
+                data["Email ID"] =
+                    formData.Email ?? "";
 
-    //            // ============================================================
-    //            // GENERATE HTML
-    //            // ============================================================
+                data["Agency Email"] =
+                    formData.PaymentDetails.AgencyEmail ?? "";
 
-    //            string htmlContent =
-    //                GenerateVendorHtmlWithData(
-    //                    data,
-    //                    goodsList);
+                data["Contact Person"] =
+                    formData.ContactPerson ?? "";
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] - HTML content completed",
-    //                functionName);
+                data["Mobile No"] =
+                    formData.MobileNumber ?? "";
 
-    //            // ============================================================
-    //            // CONVERT HTML TO PDF
-    //            // ============================================================
+                data["Bank Name"] =
+                    formData.BankDetails?.BankName ?? "";
 
-    //            byte[] pdfBytes =
-    //                ConvertHtmlToPdf(htmlContent);
+                data["Account Number"] =
+                    formData.BankDetails?.AccountNumber ?? "";
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] - PDF conversion completed",
-    //                functionName);
+                data["IFSC Code"] =
+                    formData.BankDetails?.IfscCode ?? "";
 
-    //            // ============================================================
-    //            // GET MAIL TEMPLATE
-    //            // ============================================================
+                data["Goods Return Address"] =
+                    formData.GoodsReturnAddress?.Address1 ?? "";
 
-    //            string body = "";
-    //            string subject = "";
-    //            string ccMails = "";
+                data["Credit Days"] =
+                    formData.PaymentDetails?.CreditDays ?? "";
 
-    //            using (var connection = new OdbcConnection(connectionString))
-    //            {
-    //                await connection.OpenAsync();
+                data["Discount"] =
+                    formData.PaymentDetails?.BillLevelDiscount ?? "";
 
-    //                string query =
-    //                    $@"CALL ""{sDBName}"".""Mail_BOSY&SUBJECT""('DRAFT')";
+                data["GST Number"] =
+                    formData.GstNumber ?? "";
 
-    //                using var command =
-    //                    new OdbcCommand(query, connection);
+                data["PAN Number"] =
+                    formData.PanNumber ?? "";
 
-    //                using var reader =
-    //                    await command.ExecuteReaderAsync();
+                data["MSME Number"] =
+                    formData.MsmeDetails?.MsmeNo ?? "";
 
-    //                if (await reader.ReadAsync())
-    //                {
-    //                    if (reader["Body"] != DBNull.Value)
-    //                        body = reader["Body"]?.ToString() ?? "";
+                data["Enterprise Type"] =
+                    formData.MsmeDetails?.EnterpriseType ?? "";
 
-    //                    if (reader["Subject"] != DBNull.Value)
-    //                        subject = reader["Subject"]?.ToString() ?? "";
+                //data["Major Activity"] =
+                   // formData.MsmeDetails?.MajorActivity ?? "";
 
-    //                    if ((bool)(reader.GetSchemaTable()?.Rows
-    //                        .Cast<DataRow>()
-    //                        .Any(row =>
-    //                            string.Equals(
-    //                                row["ColumnName"]?.ToString(),
-    //                                "CCMail",
-    //                                StringComparison.OrdinalIgnoreCase))))
-    //                    {
-    //                        if (reader["CCMail"] != DBNull.Value)
-    //                            ccMails = reader["CCMail"]?.ToString() ?? "";
-    //                    }
-    //                }
-    //            }
+                //data["Legal Name"] =
+                    //formData.LegalName ?? "";
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] - Mail template retrieved",
-    //                functionName);
+                data["Business Type"] =
+                    formData.PartnerType ?? "";
 
-    //            // ============================================================
-    //            // REPLACE VENDOR NAME
-    //            // ============================================================
+                data["NHFS Contact Person"] =
+                    formData.ContactPerson ?? "";
 
-    //            body = body.Replace(
-    //                "{Vendor Name}",
-    //                vendorName);
+                data["Date"] =
+                    DateTime.Now.ToString("dd/MM/yyyy");
 
-    //            // ============================================================
-    //            // SMTP SETTINGS
-    //            // ============================================================
+                log.WriteToLogFile_Debug(
+                    "Build Preview Ended",
+                    "Mail"
+                );
 
-    //            string fromMail =
-    //                _configuration["Mail:MailId"] ?? "";
+                // ============================================================
+                // 3. GET MAJOR GOODS FROM FORMDATA
+                // ============================================================
 
-    //            string username =
-    //                _configuration["Mail:SmtpUser"] ?? "";
+                var goodsList =
+                    formData.MajorGoodsServices
+                    ?? new List<MajorGoodsServiceModel>();
 
-    //            string password =
-    //                _configuration["Mail:SmtpPassword"] ?? "";
+                log.WriteToLogFile_Debug(
+                    "Major goods collected: " +
+                    goodsList.Count,
+                    "Mail"
+                );
 
-    //            string server =
-    //                _configuration["Mail:SmtpServer"] ?? "";
+                // ============================================================
+                // 4. GENERATE PREVIEW HTML
+                // ============================================================
 
-    //            string portValue =
-    //                _configuration["Mail:SmtpPort"] ?? "587";
+                string htmlContent =
+                    GenerateVendorHtmlWithData(
+                        data,
+                        goodsList
+                    );
 
-    //            if (!int.TryParse(portValue, out int port))
-    //            {
-    //                port = 587;
-    //            }
+                log.WriteToLogFile_Debug(
+                    "Html content completed",
+                    "Mail"
+                );
 
-    //            if (string.IsNullOrWhiteSpace(fromMail))
-    //                throw new Exception("MAILID is not configured.");
+                // ============================================================
+                // 5. CONVERT HTML TO PDF
+                // ============================================================
 
-    //            if (string.IsNullOrWhiteSpace(server))
-    //                throw new Exception("SMTP server is not configured.");
+                byte[] pdfBytes =
+                    ConvertHtmlToPdf(htmlContent);
 
-    //            // ============================================================
-    //            // SEND MAIL
-    //            // ============================================================
+                if (pdfBytes == null ||
+                    pdfBytes.Length == 0)
+                {
+                    throw new Exception(
+                        "Failed to generate Vendor Preview PDF."
+                    );
+                }
 
-    //            using var mail = new MailMessage();
+                log.WriteToLogFile_Debug(
+                    "ConvertHtmlToPdf completed",
+                    "Mail"
+                );
 
-    //            mail.From = new MailAddress(fromMail);
+                // ============================================================
+                // 6. GET MAIL BODY / SUBJECT
+                // ============================================================
 
-    //            // Vendor email
-    //            if (!string.IsNullOrWhiteSpace(toMail))
-    //            {
-    //                mail.To.Add(toMail.Trim());
-    //            }
+                string body = "";
+                string subject = "";
+                string ccMails = "";
 
-    //            // Agent email
-    //            if (!string.IsNullOrWhiteSpace(agentMail))
-    //            {
-    //                mail.To.Add(agentMail.Trim());
-    //            }
+                using (var connection = new OdbcConnection(connectionString))
+                {
+                    await connection.OpenAsync();
 
-    //            // CC
-    //            if (!string.IsNullOrWhiteSpace(ccMails))
-    //            {
-    //                foreach (string cc in ccMails.Split(
-    //                    new[] { ',', ';' },
-    //                    StringSplitOptions.RemoveEmptyEntries))
-    //                {
-    //                    string ccMail = cc.Trim();
+                    string query =
+                        $"CALL \"{sDBName}\".\"Mail_BOSY&SUBJECT\"('DRAFT')";
 
-    //                    if (!string.IsNullOrWhiteSpace(ccMail))
-    //                    {
-    //                        mail.CC.Add(ccMail);
-    //                    }
-    //                }
-    //            }
+                    using (var command = new OdbcCommand(query, connection))
+                    {
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                int bodyIndex =
+                                    reader.GetOrdinal("Body");
 
-    //            mail.Subject = subject;
-    //            mail.Body = body;
-    //            mail.IsBodyHtml = true;
+                                int subjectIndex =
+                                    reader.GetOrdinal("Subject");
 
-    //            // ============================================================
-    //            // PDF ATTACHMENT
-    //            // ============================================================
+                                body =
+                                    reader.IsDBNull(bodyIndex)
+                                        ? ""
+                                        : reader.GetString(bodyIndex);
 
-    //            using var pdfStream =
-    //                new MemoryStream(pdfBytes);
+                                subject =
+                                    reader.IsDBNull(subjectIndex)
+                                        ? ""
+                                        : reader.GetString(subjectIndex);
 
-    //            var attachment = new Attachment(
-    //                pdfStream,
-    //                "VendorRegistrationForm.pdf",
-    //                "application/pdf");
+                                // CCMail may or may not be returned
+                                try
+                                {
+                                    int ccIndex =
+                                        reader.GetOrdinal("CCMail");
 
-    //            mail.Attachments.Add(attachment);
+                                    ccMails =
+                                        reader.IsDBNull(ccIndex)
+                                            ? ""
+                                            : reader.GetString(ccIndex);
+                                }
+                                catch (IndexOutOfRangeException)
+                                {
+                                    ccMails = "";
+                                }
+                            }
+                        }
+                    }
+                }
 
-    //            // ============================================================
-    //            // SMTP
-    //            // ============================================================
+                // ============================================================
+                // 7. REPLACE VENDOR NAME IN MAIL BODY
+                // ============================================================
 
-    //            using var smtp =
-    //                new SmtpClient(server, port);
+                string vendorName =
+                    formData.TradeName ?? "";
 
-    //            if (!string.IsNullOrWhiteSpace(username))
-    //            {
-    //                smtp.Credentials =
-    //                    new NetworkCredential(
-    //                        username,
-    //                        password);
-    //            }
+                body =
+                    body.Replace(
+                        "{Vendor Name}",
+                        vendorName
+                    );
 
-    //            smtp.EnableSsl = true;
+                // ============================================================
+                // 8. GET SMTP SETTINGS
+                // ============================================================
 
-    //            await smtp.SendMailAsync(mail);
+                string frommail =
+                   _configuration["Mail:fromMail"];
 
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] [SUCCESS] - Mail sent successfully",
-    //                functionName);
+                string username =
+                    _configuration["Mail:SMTPUSER"];
 
-    //            return true;
-    //        }
-    //        catch (Exception ex)
-    //        {
-    //            log.WriteToLogFile_Debug(
-    //                "[VendorCreation] [SentMail] [ERROR] - " +
-    //                ex.Message +
-    //                Environment.NewLine +
-    //                ex.StackTrace,
-    //                functionName);
+                string password =
+                     _configuration["Mail:SMTPPWD"];
 
-    //            return false;
-    //        }
-    //    }
+                string server =
+                     _configuration["Mail:SMTPSERVER"];
+
+                int port =
+                    Convert.ToInt32(
+                        _configuration["Mail:SMTPPORT"]
+                    );
+
+                log.WriteToLogFile_Debug(
+                    "Mail settings loaded",
+                    "Mail"
+                );
+
+                // ============================================================
+                // 9. CREATE MAIL
+                // ============================================================
+
+                using (MailMessage mail = new MailMessage())
+                {
+                    mail.From =
+                        new MailAddress(frommail);
+
+                    // ========================================================
+                    // TO MAIL
+                    // ========================================================
+
+                    if (!string.IsNullOrWhiteSpace(toMail))
+                    {
+                        mail.To.Add(
+                            toMail.Trim()
+                        );
+                    }
+
+                    // ========================================================
+                    // AGENT MAIL
+                    // ========================================================
+
+                    if (!string.IsNullOrWhiteSpace(agentMail))
+                    {
+                        mail.To.Add(
+                            agentMail.Trim()
+                        );
+                    }
+
+                    // ========================================================
+                    // CC MAILS
+                    // ========================================================
+
+                    if (!string.IsNullOrWhiteSpace(ccMails))
+                    {
+                        foreach (
+                            string cc in ccMails.Split(
+                                new[] { ',', ';' },
+                                StringSplitOptions.RemoveEmptyEntries
+                            )
+                        )
+                        {
+                            if (!string.IsNullOrWhiteSpace(cc))
+                            {
+                                mail.CC.Add(
+                                    cc.Trim()
+                                );
+                            }
+                        }
+                    }
+
+                    // ========================================================
+                    // SUBJECT
+                    // ========================================================
+
+                    mail.Subject = subject;
+
+                    // ========================================================
+                    // BODY
+                    // ========================================================
+
+                    mail.Body = body;
+
+                    mail.IsBodyHtml = true;
+
+                    // ========================================================
+                    // 10. ATTACH GENERATED PREVIEW PDF
+                    // ========================================================
+
+                    using (MemoryStream ms =
+                        new MemoryStream(pdfBytes))
+                    {
+                        Attachment attachment =
+                            new Attachment(
+                                ms,
+                                "VendorRegistrationForm.pdf",
+                                "application/pdf"
+                            );
+
+                        mail.Attachments.Add(
+                            attachment
+                        );
+
+                        log.WriteToLogFile_Debug(
+                            "Vendor Preview PDF attached",
+                            "Mail"
+                        );
+
+                        // ====================================================
+                        // 11. SEND EMAIL
+                        // ====================================================
+
+                        using (SmtpClient smtp =
+                            new SmtpClient(
+                                server,
+                                port
+                            ))
+                        {
+                            smtp.Credentials =
+                                new System.Net.NetworkCredential(
+                                    username,
+                                    password
+                                );
+
+                            smtp.EnableSsl = true;
+
+                            log.WriteToLogFile_Debug(
+                                "Mail sending started",
+                                "Mail"
+                            );
+
+                            await smtp.SendMailAsync(mail);
+
+                            log.WriteToLogFile_Debug(
+                                "Mail Sent completed",
+                                "Mail"
+                            );
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    "Error while sending mail : " +
+                    ex.Message +
+                    " | StackTrace: " +
+                    ex.StackTrace,
+                    "Mail"
+                );
+
+                throw;
+            }
+        }
+        private string GenerateVendorHtmlWithData(
+    Dictionary<string, object> data,
+    IEnumerable<object> goodsList)
+        {
+            string GetValue(string key)
+            {
+                if (data == null || !data.ContainsKey(key))
+                    return "";
+
+                return data[key]?.ToString() ?? "";
+            }
+
+            string HtmlEncode(string value)
+            {
+                return System.Net.WebUtility.HtmlEncode(
+                    value ?? ""
+                );
+            }
+
+            string vendorName =
+                HtmlEncode(GetValue("Trade Name"));
+
+            string billingAddress =
+                HtmlEncode(GetValue("Billing Address"));
+
+            string registeredAddress =
+                HtmlEncode(GetValue("Registered Address"));
+
+            string natureOfBusiness =
+                HtmlEncode(GetValue("Nature of Business"));
+
+            string mobileNumber =
+                HtmlEncode(GetValue("Mobile Number"));
+
+            string officeTelephone =
+                HtmlEncode(GetValue("Office Telephone"));
+
+            string email =
+                HtmlEncode(GetValue("Email ID"));
+
+            string agencyEmail =
+                HtmlEncode(GetValue("Agency Email"));
+
+            string contactPerson =
+                HtmlEncode(GetValue("Contact Person"));
+
+            string bankName =
+                HtmlEncode(GetValue("Bank Name"));
+
+            string accountNumber =
+                HtmlEncode(GetValue("Account Number"));
+
+            string ifscCode =
+                HtmlEncode(GetValue("IFSC Code"));
+
+            string goodsReturnAddress =
+                HtmlEncode(GetValue("Goods Return Address"));
+
+            string creditDays =
+                HtmlEncode(GetValue("Credit Days"));
+
+            string discount =
+                HtmlEncode(GetValue("Discount"));
+
+            string gstNumber =
+                HtmlEncode(GetValue("GST Number"));
+
+            string panNumber =
+                HtmlEncode(GetValue("PAN Number"));
+
+            string msmeNumber =
+                HtmlEncode(GetValue("MSME Number"));
+
+            string enterpriseType =
+                HtmlEncode(GetValue("Enterprise Type"));
+
+            string majorActivity =
+                HtmlEncode(GetValue("Major Activity"));
+
+            string legalName =
+                HtmlEncode(GetValue("Legal Name"));
+
+            string businessType =
+                HtmlEncode(GetValue("Business Type"));
+
+            string nhfsContactPerson =
+                HtmlEncode(GetValue("NHFS Contact Person"));
+
+            string formDate =
+                HtmlEncode(GetValue("Date"));
+
+            // ------------------------------------------------------------
+            // GOODS TABLE
+            // ------------------------------------------------------------
+
+            StringBuilder goodsHtml =
+                new StringBuilder();
+
+            int goodsIndex = 1;
+
+            if (goodsList != null)
+            {
+                foreach (var item in goodsList)
+                {
+                    if (item == null)
+                        continue;
+
+                    string description = "";
+                    string category = "";
+                    string code = "";
+
+                    // Supports your existing model without forcing
+                    // one exact property structure here.
+                    var type = item.GetType();
+
+                    var property =
+                        type.GetProperty("Description");
+
+                    if (property != null)
+                    {
+                        description =
+                            property.GetValue(item)?.ToString() ?? "";
+                    }
+
+                    property =
+                        type.GetProperty("Goods");
+
+                    if (string.IsNullOrWhiteSpace(description) &&
+                        property != null)
+                    {
+                        description =
+                            property.GetValue(item)?.ToString() ?? "";
+                    }
+
+                    property =
+                        type.GetProperty("Name");
+
+                    if (string.IsNullOrWhiteSpace(description) &&
+                        property != null)
+                    {
+                        description =
+                            property.GetValue(item)?.ToString() ?? "";
+                    }
+
+                    property =
+                        type.GetProperty("Category");
+
+                    if (property != null)
+                    {
+                        category =
+                            property.GetValue(item)?.ToString() ?? "";
+                    }
+
+                    property =
+                        type.GetProperty("ItemCode");
+
+                    if (property != null)
+                    {
+                        code =
+                            property.GetValue(item)?.ToString() ?? "";
+                    }
+
+                    goodsHtml.Append($@"
+                <tr>
+                    <td style=""text-align:center;"">
+                        {goodsIndex}
+                    </td>
+
+                    <td>
+                        {HtmlEncode(description)}
+                    </td>
+
+                    <td>
+                        {HtmlEncode(category)}
+                    </td>
+
+                    <td>
+                        {HtmlEncode(code)}
+                    </td>
+                </tr>");
+
+                    goodsIndex++;
+                }
+            }
+
+            if (goodsIndex == 1)
+            {
+                goodsHtml.Append(@"
+            <tr>
+                <td colspan=""4"" style=""height:30px;"">
+                    &nbsp;
+                </td>
+            </tr>");
+            }
+
+            // ------------------------------------------------------------
+            // LOGO
+            // ------------------------------------------------------------
+
+            string logoPath =
+                Path.Combine(
+                    Directory.GetCurrentDirectory(),
+                    "wwwroot",
+                    "Images",
+                    "Logo.png"
+                );
+
+            string logoHtml = "";
+
+            if (File.Exists(logoPath))
+            {
+                byte[] logoBytes =
+                    File.ReadAllBytes(logoPath);
+
+                string base64Logo =
+                    Convert.ToBase64String(logoBytes);
+
+                logoHtml =
+                    $"data:image/png;base64,{base64Logo}";
+            }
+
+            // ------------------------------------------------------------
+            // WATERMARK
+            // ------------------------------------------------------------
+
+            string watermark = "DRAFT";
+
+            // ------------------------------------------------------------
+            // FINAL HTML
+            // ------------------------------------------------------------
+
+            string html = $@"
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset=""UTF-8"" />
+
+<title>Vendor Registration Form</title>
+
+<style>
+
+    @page {{
+        size: A4;
+        margin: 0;
+    }}
+
+    html,
+    body {{
+        margin: 0;
+        padding: 0;
+        background: white;
+    }}
+
+    body {{
+        font-family: ""Times New Roman"", serif;
+        font-size: 12px;
+    }}
+
+    .page {{
+        position: relative;
+
+        width: 1094px;
+        min-height: 1123px;
+
+        margin: 0 auto;
+
+        padding:
+            25px
+            35px
+            25px
+            35px;
+
+        box-sizing: border-box;
+
+        background: white;
+
+        overflow: hidden;
+    }}
+
+    .page * {{
+        position: relative;
+        z-index: 1;
+    }}
+
+    .watermark {{
+        position: absolute !important;
+
+        top: 50% !important;
+        left: 50% !important;
+
+        transform:
+            translate(-50%, -50%)
+            rotate(-35deg) !important;
+
+        width: 90%;
+
+        text-align: center;
+
+        font-size: 260px;
+
+        font-weight: 900;
+
+        font-family: ""Arial Black"", sans-serif;
+
+        text-transform: uppercase;
+
+        letter-spacing: 10px;
+
+        color: rgba(0, 0, 0, 0.18);
+
+        opacity: 0.25;
+
+        pointer-events: none;
+
+        user-select: none;
+
+        z-index: 0 !important;
+
+        white-space: nowrap;
+    }}
+
+    .logo-box {{
+        width: 145px;
+        height: 55px;
+
+        border: 1px solid #000;
+
+        display: flex;
+
+        align-items: center;
+
+        justify-content: center;
+
+        margin-bottom: 5px;
+    }}
+
+    .logo {{
+        width: 125px;
+        height: auto;
+    }}
+
+    .header {{
+        text-align: center;
+
+        font-size: 13px;
+
+        font-weight: bold;
+
+        margin-bottom: 10px;
+    }}
+
+    h2 {{
+        text-align: center;
+
+        font-size: 18px;
+
+        margin:
+            8px
+            0
+            12px
+            0;
+
+        text-decoration: underline;
+    }}
+
+    .ref-table {{
+        width: 100%;
+
+        border-collapse: collapse;
+
+        margin-bottom: 5px;
+    }}
+
+    .ref-table td {{
+        width: 50%;
+
+        vertical-align: top;
+
+        padding: 0;
+    }}
+
+    .right-align {{
+        text-align: right;
+    }}
+
+    .field-line {{
+        display: flex;
+
+        align-items: center;
+
+        min-height: 22px;
+    }}
+
+    .field-line label {{
+        width: 230px;
+
+        text-align: left;
+
+        font-weight: bold;
+
+        flex-shrink: 0;
+    }}
+
+    .readonly-field {{
+        display: inline-block;
+
+        text-align: left;
+
+        flex: 1;
+
+        border-bottom: 1px solid #000;
+
+        min-height: 16px;
+
+        padding-left: 3px;
+    }}
+
+    .section-title {{
+        font-weight: bold;
+
+        margin-top: 8px;
+
+        margin-bottom: 3px;
+    }}
+
+    table.data-table {{
+        width: 100%;
+
+        border-collapse: collapse;
+
+        margin-top: 5px;
+
+        margin-bottom: 8px;
+    }}
+
+    table.data-table th,
+    table.data-table td {{
+        border: 1px solid #000;
+
+        padding: 4px;
+
+        vertical-align: top;
+    }}
+
+    table.data-table th {{
+        text-align: center;
+
+        font-weight: bold;
+    }}
+
+    .signature {{
+        margin-top: 30px;
+
+        width: 100%;
+    }}
+
+    .signature-table {{
+        width: 100%;
+
+        border-collapse: collapse;
+    }}
+
+    .signature-table td {{
+        width: 50%;
+
+        height: 80px;
+
+        vertical-align: bottom;
+
+        padding: 5px;
+    }}
+
+    .signature-line {{
+        border-top: 1px solid #000;
+
+        width: 80%;
+
+        margin-top: 35px;
+    }}
+
+    .small {{
+        font-size: 11px;
+    }}
+
+</style>
+
+</head>
+
+<body>
+
+<div class=""page"">
+
+    <div class=""watermark"">
+        {HtmlEncode(watermark)}
+    </div>
+
+    {(string.IsNullOrWhiteSpace(logoHtml)
+                ? ""
+                : $@"<div class=""logo-box"">
+                <img
+                    src=""{logoHtml}""
+                    alt=""Logo""
+                    class=""logo""
+                />
+            </div>")}
+
+    <div class=""header"">
+        No. 7, Basudev Street, Pondy Bazaar,
+        T. Nagar, Chennai – 600 017
+        Contact: 044 24340714
+    </div>
+
+    <h2>
+        VENDOR REGISTRATION FORM
+    </h2>
+
+    <!-- REF / CODE / DATE / LOCATION -->
+
+    <table class=""ref-table"">
+
+        <tr>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>Ref. No.:</label>
+                    <span class=""readonly-field"">
+                    </span>
+                </div>
+
+                <div class=""field-line"">
+                    <label>CODE NO.:</label>
+                    <span class=""readonly-field"">
+                    </span>
+                </div>
+
+            </td>
+
+            <td class=""right-align"">
+
+                <div class=""field-line"">
+                    <label>Date:</label>
+                    <span class=""readonly-field"">
+                        {formDate}
+                    </span>
+                </div>
+
+                <div class=""field-line"">
+                    <label>LOCATION:</label>
+                    <span class=""readonly-field"">
+                    </span>
+                </div>
+
+            </td>
+
+        </tr>
+
+    </table>
+
+
+    <!-- BASIC DETAILS -->
+
+    <div class=""field-line"">
+        <label>1. Name of Vendor:</label>
+        <span class=""readonly-field"">
+            {vendorName}
+        </span>
+    </div>
+
+    <div class=""field-line"">
+        <label>2. Address:</label>
+        <span class=""readonly-field"">
+            {billingAddress}
+        </span>
+    </div>
+
+    <div class=""field-line"">
+        <label>Registered Office:</label>
+        <span class=""readonly-field"">
+            {registeredAddress}
+        </span>
+    </div>
+
+    <div class=""field-line"">
+        <label>3. Nature of Business:</label>
+        <span class=""readonly-field"">
+            {natureOfBusiness}
+        </span>
+    </div>
+
+
+    <!-- CONTACT -->
+
+    <table class=""ref-table"">
+
+        <tr>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>4. Contact No. 1:</label>
+                    <span class=""readonly-field"">
+                        {mobileNumber}
+                    </span>
+                </div>
+
+            </td>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>Contact No. 2:</label>
+                    <span class=""readonly-field"">
+                        {officeTelephone}
+                    </span>
+                </div>
+
+            </td>
+
+        </tr>
+
+    </table>
+
+
+    <div class=""field-line"">
+        <label>Email ID:</label>
+        <span class=""readonly-field"">
+            {email}
+        </span>
+    </div>
+
+    <div class=""field-line"">
+        <label>Contact Person:</label>
+        <span class=""readonly-field"">
+            {contactPerson}
+        </span>
+    </div>
+
+
+    <!-- BANK -->
+
+    <div class=""section-title"">
+        RTGS / BANK DETAILS
+    </div>
+
+    <table class=""data-table"">
+
+        <tr>
+            <th>Bank Name</th>
+            <th>Account Number</th>
+            <th>IFSC Code</th>
+        </tr>
+
+        <tr>
+            <td>{bankName}</td>
+            <td>{accountNumber}</td>
+            <td>{ifscCode}</td>
+        </tr>
+
+    </table>
+
+
+    <!-- GOODS RETURN -->
+
+    <div class=""field-line"">
+        <label>Goods Return Address:</label>
+        <span class=""readonly-field"">
+            {goodsReturnAddress}
+        </span>
+    </div>
+
+
+    <!-- PAYMENT -->
+
+    <div class=""section-title"">
+        PAYMENT DETAILS
+    </div>
+
+    <table class=""data-table"">
+
+        <tr>
+            <th>Credit Days</th>
+            <th>Discount</th>
+        </tr>
+
+        <tr>
+            <td>{creditDays}</td>
+            <td>{discount}</td>
+        </tr>
+
+    </table>
+
+
+    <!-- GST / PAN -->
+
+    <table class=""ref-table"">
+
+        <tr>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>GST Number:</label>
+                    <span class=""readonly-field"">
+                        {gstNumber}
+                    </span>
+                </div>
+
+            </td>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>PAN Number:</label>
+                    <span class=""readonly-field"">
+                        {panNumber}
+                    </span>
+                </div>
+
+            </td>
+
+        </tr>
+
+    </table>
+
+
+    <!-- MSME -->
+
+    <div class=""section-title"">
+        MSME DETAILS
+    </div>
+
+    <table class=""data-table"">
+
+        <tr>
+
+            <th>MSME Number</th>
+
+            <th>Enterprise Type</th>
+
+            <th>Major Activity</th>
+
+        </tr>
+
+        <tr>
+
+            <td>
+                {msmeNumber}
+            </td>
+
+            <td>
+                {enterpriseType}
+            </td>
+
+            <td>
+                {majorActivity}
+            </td>
+
+        </tr>
+
+    </table>
+
+
+    <!-- LEGAL -->
+
+    <table class=""ref-table"">
+
+        <tr>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>Legal Name:</label>
+                    <span class=""readonly-field"">
+                        {legalName}
+                    </span>
+                </div>
+
+            </td>
+
+            <td>
+
+                <div class=""field-line"">
+                    <label>Business Type:</label>
+                    <span class=""readonly-field"">
+                        {businessType}
+                    </span>
+                </div>
+
+            </td>
+
+        </tr>
+
+    </table>
+
+
+    <!-- AGENCY -->
+
+    <div class=""field-line"">
+        <label>Agency Email:</label>
+        <span class=""readonly-field"">
+            {agencyEmail}
+        </span>
+    </div>
+
+
+    <!-- MAJOR GOODS -->
+
+    <div class=""section-title"">
+        MAJOR GOODS AND SERVICES
+    </div>
+
+    <table class=""data-table"">
+
+        <tr>
+
+            <th style=""width:8%;"">
+                S.No
+            </th>
+
+            <th>
+                Description
+            </th>
+
+            <th>
+                Category
+            </th>
+
+            <th>
+                Item Code
+            </th>
+
+        </tr>
+
+        {goodsHtml}
+
+    </table>
+
+
+    <!-- NHFS CONTACT -->
+
+    <div class=""field-line"">
+        <label>NHFS Contact Person:</label>
+        <span class=""readonly-field"">
+            {nhfsContactPerson}
+        </span>
+    </div>
+
+
+    <!-- SIGNATURE -->
+
+    <div class=""signature"">
+
+        <table class=""signature-table"">
+
+            <tr>
+
+                <td>
+
+                    <div class=""signature-line""></div>
+
+                    <div class=""small"">
+                        Vendor Signature
+                    </div>
+
+                </td>
+
+                <td>
+
+                    <div class=""signature-line""></div>
+
+                    <div class=""small"">
+                        NHFS Authorized Signatory
+                    </div>
+
+                </td>
+
+            </tr>
+
+        </table>
+
+    </div>
+
+</div>
+
+</body>
+
+</html>";
+
+            return html;
+        }
+        private byte[] ConvertHtmlToPdf(string htmlContent)
+        {
+            if (string.IsNullOrWhiteSpace(htmlContent))
+            {
+                throw new ArgumentException(
+                    "HTML content is empty.",
+                    nameof(htmlContent)
+                );
+            }
+
+            try
+            {
+                // =========================================================
+                // CHECK libwkhtmltox.dll
+                // =========================================================
+
+                string baseDirectory = AppContext.BaseDirectory;
+
+                string dllPath = Path.Combine(
+                    baseDirectory,
+                    "libwkhtmltox.dll"
+                );
+
+                log.WriteToLogFile_Debug(
+                    $"[ConvertHtmlToPdf] Base Directory: {baseDirectory}",
+                    "ConvertHtmlToPdf"
+                );
+
+                log.WriteToLogFile_Debug(
+                    $"[ConvertHtmlToPdf] DLL Path: {dllPath}",
+                    "ConvertHtmlToPdf"
+                );
+
+                log.WriteToLogFile_Debug(
+                    $"[ConvertHtmlToPdf] DLL Exists: {File.Exists(dllPath)}",
+                    "ConvertHtmlToPdf"
+                );
+
+                if (!File.Exists(dllPath))
+                {
+                    throw new FileNotFoundException(
+                        $"libwkhtmltox.dll was not found at: {dllPath}"
+                    );
+                }
+
+                // =========================================================
+                // CREATE PDF DOCUMENT
+                // =========================================================
+
+                var document = new HtmlToPdfDocument
+                {
+                    GlobalSettings =
+            {
+                ColorMode = ColorMode.Color,
+
+                Orientation =
+                    Orientation.Portrait,
+
+                PaperSize =
+                    PaperKind.A4,
+
+                Margins =
+                {
+                    Top = 0,
+                    Bottom = 0,
+                    Left = 0,
+                    Right = 0
+                },
+
+                DocumentTitle =
+                    "Vendor Registration Form"
+            },
+
+                    Objects =
+            {
+                new ObjectSettings
+                {
+                    HtmlContent = htmlContent,
+
+                    WebSettings =
+                    {
+                        DefaultEncoding = "utf-8",
+
+                        LoadImages = true,
+
+                        EnableJavascript = false
+                    },
+
+                    UseLocalLinks = true
+                }
+            }
+                };
+
+                // =========================================================
+                // CONVERT
+                // =========================================================
+
+                log.WriteToLogFile_Debug(
+                    "[ConvertHtmlToPdf] Starting PDF conversion",
+                    "ConvertHtmlToPdf"
+                );
+
+                byte[] pdfBytes =
+                    _converter.Convert(document);
+
+                // =========================================================
+                // VALIDATE RESULT
+                // =========================================================
+
+                if (pdfBytes == null ||
+                    pdfBytes.Length == 0)
+                {
+                    throw new Exception(
+                        "PDF conversion returned an empty file."
+                    );
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[ConvertHtmlToPdf] PDF generated successfully. Size: {pdfBytes.Length} bytes",
+                    "ConvertHtmlToPdf"
+                );
+
+                return pdfBytes;
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    "[ConvertHtmlToPdf] ERROR - " +
+                    ex.ToString(),
+                    "ConvertHtmlToPdf"
+                );
+
+                throw;
+            }
+        }
+
         private static string GenerateOTP()
         {
             try
@@ -1190,6 +2364,340 @@ namespace VRF_API.Services
         {
             return LoadStates(country);
         }
+        public async Task<(bool Success, string Message)> SaveNewProductAsync(
+            SaveRequest request)
+        {
+            if (request == null)
+            {
+                return (false, "Request cannot be null.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.GstNumber))
+            {
+                return (false, "GST Number is required.");
+            }
+
+            try
+            {
+                string server =
+                    _configuration["ConnectionSettings:Server"] ?? "";
+
+                string dbUser =
+                    _configuration["ConnectionSettings:DBUser"] ?? "";
+
+                string dbPassword =
+                    _configuration["ConnectionSettings:DBPwd"] ?? "";
+
+                string dbName =
+                    _configuration["ConnectionSettings:DBName"] ?? "";
+
+                /*
+                 * If DBUser / DBPwd are encrypted in your configuration,
+                 * decrypt them here using your existing decrypt method.
+                 *
+                 * Example:
+                 *
+                 * dbUser = DBConnection.DecryptFun(dbUser);
+                 * dbPassword = DBConnection.DecryptFun(dbPassword);
+                 */
+
+
+                /*
+                 * =====================================================
+                 * GET VENDOR ID USING GST NUMBER
+                 * =====================================================
+                 */
+
+                int vendorId;
+
+                await using (var connection =
+                    new OdbcConnection(connectionString))
+                {
+                    await connection.OpenAsync();
+                    string vendorQuery = $@"
+    SELECT ""Id""
+    FROM ""{sDBName}"".""TEC_OLED""
+    WHERE ""GstNo"" = ?
+";
+
+
+                    await using (var command =
+                        new OdbcCommand(vendorQuery, connection))
+                    {
+                        command.Parameters.AddWithValue(
+                            "GstNo",
+                            request.GstNumber.Trim().ToUpper());
+
+                        object? result =
+                            await command.ExecuteScalarAsync();
+
+                        if (result == null ||
+                            result == DBNull.Value)
+                        {
+                            //_logger.LogWarning(
+                            //    "[NewProduct] Vendor not found for GST: {GST}",
+                            //    request.GstNumber);
+
+                            return (
+                                false,
+                                "Vendor not found for the provided GST Number."
+                            );
+                        }
+
+                        vendorId =
+                            Convert.ToInt32(result);
+                    }
+
+                    //_logger.LogInformation(
+                    //    "[NewProduct] Vendor ID resolved: {VendorId}",
+                    //    vendorId);
+
+                    /*
+                     * =================================================
+                     * START TRANSACTION
+                     * =================================================
+                     */
+
+                     using OdbcTransaction transaction =
+                         connection.BeginTransaction();
+
+                    try
+                    {
+                        
+
+                        await InsertPaymentDetails(
+                            connection,
+                            transaction,
+                            vendorId,
+                            request.PaymentDetails);
+
+                        /*
+                         * =================================================
+                         * INSERT MAJOR GOODS / SERVICES
+                         * =================================================
+                         */
+
+                        await InsertMajorGoodsServices(
+                            connection,
+                            transaction,
+                            vendorId,
+                            request.MajorGoodsServices);
+
+                        /*
+                         * =================================================
+                         * INSERT DOCUMENTS
+                         * =================================================
+                         */
+
+                        await InsertDocuments1(
+                            connection,
+                            transaction,
+                            vendorId,
+                            request.UploadedFiles);
+
+                        /*
+                         * =================================================
+                         * COMMIT
+                         * =================================================
+                         */
+
+                        await transaction.CommitAsync();
+
+                        //_logger.LogInformation(
+                        //    "[NewProduct] Transaction committed successfully. VendorId: {VendorId}",
+                        //    vendorId);
+
+                        return (
+                            true,
+                            "Product details submitted successfully."
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        //_logger.LogError(
+                        //    ex,
+                        //    "[NewProduct] Error occurred. Rolling back transaction.");
+
+                        await transaction.RollbackAsync();
+
+                        return (
+                            false,
+                            "Unable to save product details."
+                        );
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //log.WriteToLogFile_Debug(
+                  
+                //    "[NewProduct] Unexpected error while saving product details.",);
+
+                return (
+                    false,
+                    "Unable to save product details."
+                );
+            }
+        }
+        private async Task InsertDocuments1(
+        OdbcConnection conn,
+        OdbcTransaction transaction,
+        int vendorId,
+        List<string> uploadedFiles)
+        {
+            log.WriteToLogFile_Debug(
+                "[NewProduct] [InsertDocuments1] [START] - Inserting vendor documents",
+                "InsertDocuments1");
+
+            if (uploadedFiles == null || uploadedFiles.Count == 0)
+            {
+                log.WriteToLogFile_Debug(
+                    "[NewProduct] [InsertDocuments1] [INFO] - No uploaded files found",
+                    "InsertDocuments1");
+
+                return;
+            }
+
+
+            string imagePath =
+               _configuration["Folder:ImagePath"];
+
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                throw new Exception(
+                    "ImagePath is not configured in Web.config.");
+            }
+
+            string sql = $@"
+        INSERT INTO ""{sDBName}"".""TEC_LED7""
+        (
+            ""Id"",
+            ""LineId"",
+            ""TradeName"",
+            ""DocumentName"",
+            ""DocumentType"",
+            ""FileData""
+        )
+        VALUES
+        (
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
+        )";
+
+            int lineId = 0;
+
+            foreach (string fileName in uploadedFiles)
+            {
+                if (string.IsNullOrWhiteSpace(fileName))
+                    continue;
+
+                /*
+                 * Only take the file name.
+                 *
+                 * This prevents a value such as:
+                 * C:\Uploads\abc.pdf
+                 *
+                 * from being treated as the file name.
+                 */
+                string cleanFileName =
+                    Path.GetFileName(fileName);
+
+                /*
+                 * Build the complete physical path
+                 *
+                 * Example:
+                 *
+                 * ImagePath = D:\VendorDocuments
+                 * FileName  = invoice.pdf
+                 *
+                 * Result:
+                 * D:\VendorDocuments\invoice.pdf
+                 */
+                string documentPath =
+                    Path.Combine(
+                        imagePath,
+                        cleanFileName);
+
+                /*
+                 * Convert to the format expected by the DB.
+                 *
+                 * If your application stores Windows paths,
+                 * you can remove this replacement.
+                 */
+                documentPath =
+                    documentPath.Replace("\\", "/");
+
+                using (OdbcCommand cmd =
+                       new OdbcCommand(sql, conn, transaction))
+                {
+                    /*
+                     * IMPORTANT:
+                     *
+                     * ODBC uses positional parameters (?).
+                     *
+                     * Therefore parameters MUST be added
+                     * in exactly the same order as the SQL.
+                     */
+
+                    cmd.Parameters.Add(
+                        "Id",
+                        OdbcType.Int).Value =
+                        vendorId;
+
+                    cmd.Parameters.Add(
+                        "LineId",
+                        OdbcType.Int).Value =
+                        lineId;
+
+                    /*
+                     * TradeName
+                     *
+                     * If TEC_LED7 requires the vendor trade name,
+                     * replace this with the actual value.
+                     */
+                    cmd.Parameters.Add(
+                        "TradeName",
+                        OdbcType.VarChar).Value =
+                        "";
+
+                    cmd.Parameters.Add(
+                        "DocumentName",
+                        OdbcType.VarChar).Value =
+                        cleanFileName;
+
+                    cmd.Parameters.Add(
+                        "DocumentType",
+                        OdbcType.VarChar).Value =
+                        "Performa Document";
+
+                    cmd.Parameters.Add(
+                        "FileData",
+                        OdbcType.VarChar).Value =
+                        documentPath;
+
+                    cmd.ExecuteNonQuery();
+                }
+
+                log.WriteToLogFile_Debug(
+                    "[NewProduct] [InsertDocuments1] [INSERTED] - " +
+                    $"VendorId: {vendorId}, " +
+                    $"LineId: {lineId}, " +
+                    $"DocumentName: {cleanFileName}, " +
+                    $"DocumentPath: {documentPath}",
+                    "InsertDocuments1");
+
+                lineId++;
+            }
+
+            log.WriteToLogFile_Debug(
+                "[NewProduct] [InsertDocuments1] [END] - Documents inserted successfully",
+                "InsertDocuments1");
+        }
+
         public async Task<ApiResponse> SaveDraft(
            int page,
            FormDataModel model,
@@ -1388,7 +2896,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.BusinessPartners
+                            model.OtherBusinessLocations
                         );
 
 
@@ -1396,7 +2904,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.PartnerDetails
+                            model.BusinessPartners
                         );
 
                         break;
@@ -1425,7 +2933,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.BusinessPartners
+                            model.OtherBusinessLocations
                         );
 
 
@@ -1433,7 +2941,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.PartnerDetails
+                            model.BusinessPartners
                         );
 
 
@@ -1478,7 +2986,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.BusinessPartners
+                            model.OtherBusinessLocations
                         );
 
 
@@ -1486,7 +2994,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.PartnerDetails
+                            model.BusinessPartners
                         );
 
 
@@ -1531,7 +3039,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.BusinessPartners
+                            model.OtherBusinessLocations
                         );
 
 
@@ -1539,7 +3047,7 @@ namespace VRF_API.Services
                             connection,
                             transaction,
                             id,
-                            model.PartnerDetails
+                            model.BusinessPartners
                         );
 
 
@@ -1845,31 +3353,32 @@ namespace VRF_API.Services
         // =====================================================
 
         private async Task InsertDocuments(
-            OdbcConnection connection,
-            OdbcTransaction transaction,
-            int id,
-            FormDataModel model,
-            UploadedFilesModel uploadedFiles)
+     OdbcConnection connection,
+     OdbcTransaction transaction,
+     int id,
+     FormDataModel model,
+     UploadedFilesModel uploadedFiles)
         {
             log.WriteToLogFile_Debug(
                 $"[InsertDocuments] START - Id: {id}",
                 "InsertDocuments"
             );
 
-
             if (uploadedFiles == null)
             {
+                log.WriteToLogFile_Debug(
+                    "[InsertDocuments] uploadedFiles is null",
+                    "InsertDocuments"
+                );
+
                 return;
             }
-
 
             string tradeName =
                 model.TradeName?.Trim() ?? "";
 
-
             string uploadFolder =
                 _configuration["Folder:Path"];
-
 
             if (string.IsNullOrWhiteSpace(uploadFolder))
             {
@@ -1878,65 +3387,54 @@ namespace VRF_API.Services
                 );
             }
 
-
             // -------------------------------------------------
-            // DOCUMENTS
+            // SINGLE DOCUMENTS
             // -------------------------------------------------
 
             var documents =
                 new List<(int LineId, string DocumentType, string FileName)>
                 {
-                    (
-                        1,
-                        "PAN Card",
-                        uploadedFiles.PanCard
-                    ),
+            (
+                1,
+                "PAN Card",
+                uploadedFiles.PanCard ?? ""
+            ),
 
-                    (
-                        2,
-                        "GST Certificate",
-                        uploadedFiles.GstCertificate
-                    ),
+            (
+                2,
+                "GST Certificate",
+                uploadedFiles.GstCertificate ?? ""
+            ),
 
-                    (
-                        3,
-                        "Bank Account",
-                        uploadedFiles.BankProof
-                    ),
+            (
+                3,
+                "Bank Account",
+                uploadedFiles.BankProof ?? ""
+            ),
 
-                    (
-                        4,
-                        "MSME Certificate",
-                        uploadedFiles.MsmeCertificate
-                    ),
-
-                    (
-                        5,
-                        "Performa Invoice",
-                        uploadedFiles.PerformaInvoice
-                    )
+            (
+                4,
+                "MSME Certificate",
+                uploadedFiles.MsmeCertificate ?? ""
+            )
                 };
 
+            // -------------------------------------------------
+            // INSERT SINGLE DOCUMENTS
+            // -------------------------------------------------
 
             foreach (var document in documents)
             {
-                if (string.IsNullOrWhiteSpace(
-                    document.FileName))
+                if (string.IsNullOrWhiteSpace(document.FileName))
                 {
                     continue;
                 }
-
-
-                // -------------------------------------------------
-                // CREATE FULL FILE PATH
-                // -------------------------------------------------
 
                 string fullFilePath =
                     Path.Combine(
                         uploadFolder,
                         document.FileName
                     );
-
 
                 log.WriteToLogFile_Debug(
                     $"[InsertDocuments] " +
@@ -1946,31 +3444,25 @@ namespace VRF_API.Services
                     "InsertDocuments"
                 );
 
-
-                // -------------------------------------------------
-                // INSERT PATH ONLY
-                // -------------------------------------------------
-
                 string query = @$"
-                    INSERT INTO ""{sDBName}"".""TEC_LED7""
-                    (
-                        ""Id"",
-                        ""LineId"",
-                        ""TradeName"",
-                        ""DocumentName"",
-                        ""DocumentType"",
-                        ""FileData""
-                    )
-                    VALUES
-                    (
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?
-                    )";
-
+            INSERT INTO ""{sDBName}"".""TEC_LED7""
+            (
+                ""Id"",
+                ""LineId"",
+                ""TradeName"",
+                ""DocumentName"",
+                ""DocumentType"",
+                ""FileData""
+            )
+            VALUES
+            (
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?
+            )";
 
                 using var command =
                     new OdbcCommand(
@@ -1979,49 +3471,149 @@ namespace VRF_API.Services
                         transaction
                     );
 
-
                 command.Parameters.AddWithValue(
                     "@Id",
                     id
                 );
-
 
                 command.Parameters.AddWithValue(
                     "@LineId",
                     document.LineId
                 );
 
-
                 command.Parameters.AddWithValue(
                     "@TradeName",
                     tradeName
                 );
-
 
                 command.Parameters.AddWithValue(
                     "@DocumentName",
                     document.FileName
                 );
 
-
                 command.Parameters.AddWithValue(
                     "@DocumentType",
                     document.DocumentType
                 );
 
-
-                // IMPORTANT:
-                // FileData now stores FILE PATH,
-                // not Base64.
+                // FileData stores physical file path
                 command.Parameters.AddWithValue(
                     "@FileData",
                     fullFilePath
                 );
 
-
                 await command.ExecuteNonQueryAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[InsertDocuments] Inserted - " +
+                    $"DocumentType: {document.DocumentType}, " +
+                    $"FileName: {document.FileName}",
+                    "InsertDocuments"
+                );
             }
 
+            // -------------------------------------------------
+            // MULTIPLE PROFORMA INVOICES
+            // -------------------------------------------------
+
+            if (uploadedFiles.PerformaInvoice != null &&
+                uploadedFiles.PerformaInvoice.Count > 0)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[InsertDocuments] Proforma Invoice Count: " +
+                    $"{uploadedFiles.PerformaInvoice.Count}",
+                    "InsertDocuments"
+                );
+
+                foreach (string fileName in uploadedFiles.PerformaInvoice)
+                {
+                    if (string.IsNullOrWhiteSpace(fileName))
+                    {
+                        continue;
+                    }
+
+                    string fullFilePath =
+                        Path.Combine(
+                            uploadFolder,
+                            fileName
+                        );
+
+                    log.WriteToLogFile_Debug(
+                        $"[InsertDocuments] " +
+                        $"DocumentType: Performa Invoice, " +
+                        $"FileName: {fileName}, " +
+                        $"Path: {fullFilePath}",
+                        "InsertDocuments"
+                    );
+
+                    string query = @$"
+                INSERT INTO ""{sDBName}"".""TEC_LED7""
+                (
+                    ""Id"",
+                    ""LineId"",
+                    ""TradeName"",
+                    ""DocumentName"",
+                    ""DocumentType"",
+                    ""FileData""
+                )
+                VALUES
+                (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?
+                )";
+
+                    using var command =
+                        new OdbcCommand(
+                            query,
+                            connection,
+                            transaction
+                        );
+
+                    command.Parameters.AddWithValue(
+                        "@Id",
+                        id
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@LineId",
+                        5
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@TradeName",
+                        tradeName
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@DocumentName",
+                        fileName
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@DocumentType",
+                        "Performa Invoice"
+                    );
+
+                    // FileData stores physical file path
+                    command.Parameters.AddWithValue(
+                        "@FileData",
+                        fullFilePath
+                    );
+
+                    await command.ExecuteNonQueryAsync();
+
+                    log.WriteToLogFile_Debug(
+                        $"[InsertDocuments] " +
+                        $"Inserted Proforma Invoice - " +
+                        $"FileName: {fileName}",
+                        "InsertDocuments"
+                    );
+                }
+            }
 
             log.WriteToLogFile_Debug(
                 "[InsertDocuments] END",
@@ -2669,55 +4261,160 @@ namespace VRF_API.Services
         }
 
         private async Task SubmitInsertDocuments(
-            OdbcConnection connection,
-            OdbcTransaction transaction,
-            int id,
-            FormDataModel model,
-            UploadedFilesModel uploadedFiles)
+        OdbcConnection connection,
+        OdbcTransaction transaction,
+        int id,
+        FormDataModel model,
+        UploadedFilesModel uploadedFiles)
         {
             if (uploadedFiles == null)
                 return;
 
             string tradeName = model.TradeName?.Trim() ?? "";
 
+            // -------------------------------------------------
+            // SINGLE DOCUMENTS
+            // -------------------------------------------------
+
             var documents = new List<(int LineId, string DocumentType, string FileName)>
-            {
-                (1, "PAN Card", uploadedFiles.PanCard),
-                (2, "GST Certificate", uploadedFiles.GstCertificate),
-                (3, "Bank Account", uploadedFiles.BankProof),
-                (4, "MSME Certificate", uploadedFiles.MsmeCertificate),
-                (5, "Performa Invoice", uploadedFiles.PerformaInvoice)
-            };
+    {
+        (1, "PAN Card", uploadedFiles.PanCard ?? ""),
+        (2, "GST Certificate", uploadedFiles.GstCertificate ?? ""),
+        (3, "Bank Account", uploadedFiles.BankProof ?? ""),
+        (4, "MSME Certificate", uploadedFiles.MsmeCertificate ?? "")
+    };
+
+            // -------------------------------------------------
+            // INSERT SINGLE DOCUMENTS
+            // -------------------------------------------------
 
             foreach (var document in documents)
             {
                 if (string.IsNullOrWhiteSpace(document.FileName))
                     continue;
 
-                string fullFilePath = GetUploadedFilePath(document.FileName);
+                string fullFilePath =
+                    GetUploadedFilePath(document.FileName);
 
                 string query = $@"
-                    INSERT INTO ""{sDBName}"".""TEC_LED7""
-                    (
-                        ""Id"",
-                        ""LineId"",
-                        ""TradeName"",
-                        ""DocumentName"",
-                        ""DocumentType"",
-                        ""FileData""
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)";
+            INSERT INTO ""{sDBName}"".""TEC_LED7""
+            (
+                ""Id"",
+                ""LineId"",
+                ""TradeName"",
+                ""DocumentName"",
+                ""DocumentType"",
+                ""FileData""
+            )
+            VALUES (?, ?, ?, ?, ?, ?)";
 
-                using var command = new OdbcCommand(query, connection, transaction);
+                using var command =
+                    new OdbcCommand(
+                        query,
+                        connection,
+                        transaction
+                    );
 
-                command.Parameters.AddWithValue("@Id", id);
-                command.Parameters.AddWithValue("@LineId", document.LineId);
-                command.Parameters.AddWithValue("@TradeName", tradeName);
-                command.Parameters.AddWithValue("@DocumentName", document.FileName);
-                command.Parameters.AddWithValue("@DocumentType", document.DocumentType);
-                command.Parameters.AddWithValue("@FileData", fullFilePath);
+                command.Parameters.AddWithValue(
+                    "@Id",
+                    id
+                );
+
+                command.Parameters.AddWithValue(
+                    "@LineId",
+                    document.LineId
+                );
+
+                command.Parameters.AddWithValue(
+                    "@TradeName",
+                    tradeName
+                );
+
+                command.Parameters.AddWithValue(
+                    "@DocumentName",
+                    document.FileName
+                );
+
+                command.Parameters.AddWithValue(
+                    "@DocumentType",
+                    document.DocumentType
+                );
+
+                command.Parameters.AddWithValue(
+                    "@FileData",
+                    fullFilePath
+                );
 
                 await command.ExecuteNonQueryAsync();
+            }
+
+            // -------------------------------------------------
+            // MULTIPLE PROFORMA INVOICES
+            // -------------------------------------------------
+
+            if (uploadedFiles.PerformaInvoice != null &&
+                uploadedFiles.PerformaInvoice.Count > 0)
+            {
+                foreach (string fileName in uploadedFiles.PerformaInvoice)
+                {
+                    if (string.IsNullOrWhiteSpace(fileName))
+                        continue;
+
+                    string fullFilePath =
+                        GetUploadedFilePath(fileName);
+
+                    string query = $@"
+                INSERT INTO ""{sDBName}"".""TEC_LED7""
+                (
+                    ""Id"",
+                    ""LineId"",
+                    ""TradeName"",
+                    ""DocumentName"",
+                    ""DocumentType"",
+                    ""FileData""
+                )
+                VALUES (?, ?, ?, ?, ?, ?)";
+
+                    using var command =
+                        new OdbcCommand(
+                            query,
+                            connection,
+                            transaction
+                        );
+
+                    command.Parameters.AddWithValue(
+                        "@Id",
+                        id
+                    );
+
+                    // 5 = Proforma Invoice
+                    command.Parameters.AddWithValue(
+                        "@LineId",
+                        5
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@TradeName",
+                        tradeName
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@DocumentName",
+                        fileName
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@DocumentType",
+                        "Performa Invoice"
+                    );
+
+                    command.Parameters.AddWithValue(
+                        "@FileData",
+                        fullFilePath
+                    );
+
+                    await command.ExecuteNonQueryAsync();
+                }
             }
         }
 
@@ -2789,7 +4486,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@DisCount",
-                payment?.DisCount ?? "");
+                payment?.BillLevelDiscount ?? "");
 
             command.Parameters.AddWithValue(
                 "@MarkDownTax0",
@@ -2825,7 +4522,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@BusinessType",
-                payment?.BusinessType ?? "");
+                payment?.TypeOfVendor ?? "");
 
             command.Parameters.AddWithValue(
                 "@AgencyEmail",
@@ -2854,7 +4551,7 @@ namespace VRF_API.Services
             OdbcConnection connection,
             OdbcTransaction transaction,
             int id,
-            List<BusinessPartnerModel> locations)
+            List<BusinessLocationModel> locations)
         {
             if (locations == null ||
                 locations.Count == 0)
@@ -2866,35 +4563,41 @@ namespace VRF_API.Services
             int lineId = 1;
 
 
-            foreach (var partner in locations)
+            foreach (var location in locations)
             {
                 string query = @$"
-        INSERT INTO ""{sDBName}"".""TEC_LED2""
-        (
-            ""Id"",
-            ""LineId"",
-            ""Name"",
-            ""Designation"",
-            ""ContactNo"",
-            ""Email""
-        )
-        VALUES
-        (
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?
-        )";
+                    INSERT INTO ""{sDBName}"".""TEC_LED1""
+                    (
+                        ""Id"",
+                        ""LineId"",
+                        ""BusinessState"",
+                        ""GSTNumber"",
+                        ""AddressOfPlace"",
+                        ""GSTVendorClassification""
+                    )
+                    VALUES
+                    (
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                    )";
 
-                using var command = new OdbcCommand(
-                    query,
-                    connection,
-                    transaction
+
+                using var command =
+                    new OdbcCommand(
+                        query,
+                        connection,
+                        transaction
+                    );
+
+
+                command.Parameters.AddWithValue(
+                    "@Id",
+                    id
                 );
-
-                command.Parameters.AddWithValue("@Id", id);
 
                 command.Parameters.AddWithValue(
                     "@LineId",
@@ -2902,26 +4605,28 @@ namespace VRF_API.Services
                 );
 
                 command.Parameters.AddWithValue(
-                    "@Name",
-                    partner.Name ?? ""
+                    "@BusinessState",
+                    location.State ?? ""
                 );
 
                 command.Parameters.AddWithValue(
-                    "@Designation",
-                    partner.Designation ?? ""
+                    "@GSTNumber",
+                    location.GstNumber ?? ""
                 );
 
                 command.Parameters.AddWithValue(
-                    "@ContactNo",
-                    partner.ContactNo ?? ""
+                    "@AddressOfPlace",
+                    location.Address ?? ""
                 );
 
                 command.Parameters.AddWithValue(
-                    "@Email",
-                    partner.Email ?? ""
+                    "@GSTVendorClassification",
+                    location.GstClassification ?? ""
                 );
+
 
                 await command.ExecuteNonQueryAsync();
+
 
                 lineId++;
             }
@@ -2936,7 +4641,7 @@ namespace VRF_API.Services
             OdbcConnection connection,
             OdbcTransaction transaction,
             int id,
-            List<PartnerDetails> partners)
+            List<BusinessPartnerModel> partners)
         {
             if (partners == null ||
                 partners.Count == 0)
@@ -2951,14 +4656,14 @@ namespace VRF_API.Services
             foreach (var partner in partners)
             {
                 string query = @$"
-                    INSERT INTO ""{sDBName}"".""TEC_LED3""
+                    INSERT INTO ""{sDBName}"".""TEC_LED2""
                     (
                         ""Id"",
                         ""LineId"",
                         ""Name"",
                         ""Designation"",
-                        ""ContactNo"",
-                        ""Email""
+                        ""Contact_No"",
+                        ""Email_ID""
                     )
                     VALUES
                     (
@@ -3000,13 +4705,13 @@ namespace VRF_API.Services
                 );
 
                 command.Parameters.AddWithValue(
-                    "@ContactNo",
-                    partner.Contact_No ?? ""
+                    "@Contact_No",
+                    partner.ContactNo ?? ""
                 );
 
                 command.Parameters.AddWithValue(
-                    "@Email",
-                    partner.Email_ID ?? ""
+                    "@Email_ID",
+                    partner.Email ?? ""
                 );
 
 
@@ -3041,9 +4746,9 @@ namespace VRF_API.Services
             foreach (var contact in contacts)
             {
                 string query = @$"
-                    INSERT INTO ""{sDBName}"".""TEC_LED4""
+                    INSERT INTO ""{sDBName}"".""TEC_LED3""
                     (
-                        ""Id"",
+                        ""ID"",
                         ""LineId"",
                         ""Name"",
                         ""ContactNo"",
@@ -3068,7 +4773,7 @@ namespace VRF_API.Services
 
 
                 command.Parameters.AddWithValue(
-                    "@Id",
+                    "@ID",
                     id
                 );
 
@@ -3141,7 +4846,7 @@ namespace VRF_API.Services
 
 
                 string query = @$"
-                    INSERT INTO ""{sDBName}"".""TEC_LED5""
+                    INSERT INTO ""{sDBName}"".""TEC_LED4""
                     (
                         ""Id"",
                         ""LineId"",
@@ -3149,7 +4854,7 @@ namespace VRF_API.Services
                         ""HSNCode"",
                         ""Brand"",
                         ""Size"",
-                        ""ImageUpload""
+                        ""Product""
                     )
                     VALUES
                     (
@@ -3202,7 +4907,7 @@ namespace VRF_API.Services
                 );
 
                 command.Parameters.AddWithValue(
-                    "@ImageUpload",
+                    "@Product",
                     imagePath ?? ""
                 );
 
@@ -3236,7 +4941,7 @@ namespace VRF_API.Services
 
             string uploadFolder =
                 _configuration[
-                    "FileUpload:TempFolder"
+                    "Folder:ImagePath"
                 ];
 
 
@@ -3740,7 +5445,7 @@ namespace VRF_API.Services
                 new PartnerDetails { Name = "", Contact_No = "", Email_ID = "" }
             };
             var majorGoodsService = new List<MajorGoodsService>{
-                new MajorGoodsService { Product =  "",Brand = "",Size = "" }
+                new MajorGoodsService { ImageFile =  "",Brand = "",Size = "" }
             };
             var MajorCustomers = new List<MajorCustomers>{
                 new MajorCustomers {  CustomerName= "" }
@@ -3850,20 +5555,20 @@ namespace VRF_API.Services
                     await file.CopyToAsync(stream);
                 }
 
-                string rowKeySuffix = "";
+                //string rowKeySuffix = "";
 
-                if (documentType.Equals(
-                        "Performa Invoice",
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    rowKeySuffix = "_" + rowIndex;
-                }
+                //if (documentType.Equals(
+                //        "Performa Invoice",
+                //        StringComparison.OrdinalIgnoreCase))
+                //{
+                //    rowKeySuffix = "_" + rowIndex;
+                //}
 
                 string sessionPathKey =
-                    $"Path_{documentType}{rowKeySuffix}";
+                    $"Path_{documentType}";
 
                 string sessionFileNameKey =
-                    $"FileName_{documentType}{rowKeySuffix}";
+                    $"FileName_{documentType}";
 
                 _sessionManager.Set(
                     sessionPathKey,
@@ -3913,7 +5618,10 @@ namespace VRF_API.Services
                 );
             }
         }
-        public async Task<ApiResponse> DownloadKYCFile(string file, string gstNo, string documentType)
+        public async Task<ApiResponse> DownloadKYCFile(
+    string file,
+    string gstNo,
+    string documentType)
         {
             string functionName = "Download_KYC_File";
 
@@ -3929,27 +5637,110 @@ namespace VRF_API.Services
 
             try
             {
-                string sessionTempPathKey = "TempFilePath_" + documentType;
-                string sessionViewPathKey = "Path_" + documentType;
-                string sessionFileNameKey = "FileName_" + documentType;
+                // =========================================================
+                // PERFORMA INVOICE
+                // =========================================================
+                // For Performa Invoice:
+                // Folder:Path + file name
+                // No DB FileData
+                // No Base64 conversion
+                // =========================================================
 
-                var sessionViewPath = _sessionManager.Get(sessionViewPathKey);
+                if (documentType?.Trim().Equals(
+                        "Performa Invoice",
+                        StringComparison.OrdinalIgnoreCase) == true
+                    ||
+                    documentType?.Trim().Equals(
+                        "Proforma Invoice",
+                        StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    string folderPath = _configuration["Folder:Path"];
+
+                    if (string.IsNullOrWhiteSpace(folderPath))
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "KYC document folder path is not configured.",
+                            null);
+                    }
+
+                    string fileName = Path.GetFileName(file?.Trim() ?? "");
+
+                    if (string.IsNullOrWhiteSpace(fileName))
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "File name is required.",
+                            null);
+                    }
+
+                    string filePath = Path.Combine(
+                        folderPath,
+                        fileName);
+
+                    log.WriteToLogFile_Debug(
+                        $"Performa Invoice file path: {filePath}",
+                        functionName);
+
+                    if (!File.Exists(filePath))
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "Performa Invoice file not found.",
+                            null);
+                    }
+
+                    byte[] fileBytes =
+                        await File.ReadAllBytesAsync(filePath);
+
+                    fileResultModel.FileBytes = fileBytes;
+                    fileResultModel.FileName = fileName;
+                    fileResultModel.ContentType =
+                        GetContentType(fileName);
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "Successfully retrieved the file",
+                        fileResultModel);
+                }
+
+                // =========================================================
+                // OTHER DOCUMENT TYPES
+                // =========================================================
+
+                string sessionTempPathKey =
+                    "TempFilePath_" + documentType;
+
+                string sessionViewPathKey =
+                    "Path_" + documentType;
+
+                string sessionFileNameKey =
+                    "FileName_" + documentType;
+
+                var sessionViewPath =
+                    _sessionManager.Get(sessionViewPathKey);
 
                 if (sessionViewPath != null &&
                     !string.IsNullOrWhiteSpace(sessionViewPath.ToString()) &&
                     File.Exists(sessionViewPath.ToString()))
                 {
-                    string viewPath = sessionViewPath.ToString();
+                    string viewPath =
+                        sessionViewPath.ToString();
 
-                    byte[] fileBytes = await File.ReadAllBytesAsync(viewPath);
+                    byte[] fileBytes =
+                        await File.ReadAllBytesAsync(viewPath);
 
-                    string fileName = _sessionManager.Get(sessionFileNameKey) != null
-                        ? _sessionManager.Get(sessionFileNameKey).ToString()
-                        : Path.GetFileName(viewPath);
+                    string fileName =
+                        _sessionManager.Get(sessionFileNameKey) != null
+                            ? _sessionManager
+                                .Get(sessionFileNameKey)
+                                .ToString()
+                            : Path.GetFileName(viewPath);
 
                     fileResultModel.FileBytes = fileBytes;
                     fileResultModel.FileName = fileName;
-                    fileResultModel.ContentType = GetContentType(fileName);
+                    fileResultModel.ContentType =
+                        GetContentType(fileName);
 
                     return ApiResponseUtility.GenerateApiResponse(
                         ApiStatusEnum.Success,
@@ -3957,46 +5748,64 @@ namespace VRF_API.Services
                         fileResultModel);
                 }
 
-                var sessionTempPath = _sessionManager.Get(sessionTempPathKey);
+                var sessionTempPath =
+                    _sessionManager.Get(sessionTempPathKey);
 
                 if (sessionTempPath != null &&
                     !string.IsNullOrWhiteSpace(sessionTempPath.ToString()) &&
                     File.Exists(sessionTempPath.ToString()))
                 {
-                    string tempPath = sessionTempPath.ToString();
+                    string tempPath =
+                        sessionTempPath.ToString();
 
-                    byte[] fileBytes = await File.ReadAllBytesAsync(tempPath);
+                    byte[] fileBytes =
+                        await File.ReadAllBytesAsync(tempPath);
 
-                    string fileName = _sessionManager.Get(sessionFileNameKey) != null
-                        ? _sessionManager.Get(sessionFileNameKey).ToString()
-                        : Path.GetFileName(tempPath);
+                    string fileName =
+                        _sessionManager.Get(sessionFileNameKey) != null
+                            ? _sessionManager
+                                .Get(sessionFileNameKey)
+                                .ToString()
+                            : Path.GetFileName(tempPath);
 
                     fileResultModel.FileBytes = fileBytes;
                     fileResultModel.FileName = fileName;
-                    fileResultModel.ContentType = GetContentType(fileName);
+                    fileResultModel.ContentType =
+                        GetContentType(fileName);
 
                     return ApiResponseUtility.GenerateApiResponse(
                         ApiStatusEnum.Success,
                         "Successfully retrieved the file",
                         fileResultModel);
                 }
+
+                // =========================================================
+                // GET VENDOR ID
+                // =========================================================
 
                 string getIdQuery = $@"
             select ifnull(""Id"",0)
             from ""{sDBName}"".""TEC_OLED""
             where ""GstNo""='{gstNo?.Trim()}'";
 
-                string getId = db.GetSingleValue(getIdQuery);
+                string getId =
+                    db.GetSingleValue(getIdQuery);
 
-                if (!string.IsNullOrEmpty(getId) && getId != "0")
+                if (!string.IsNullOrEmpty(getId) &&
+                    getId != "0")
                 {
+                    // =====================================================
+                    // GET FILE DATA FROM DATABASE
+                    // =====================================================
+
                     string fileDataQuery = $@"
                 select ""FileData""
                 from ""{sDBName}"".""TEC_LED7""
                 where ""Id""='{getId}'
                 and ""DocumentType""='{documentType}'";
 
-                    string fileDataBase64 = db.GetSingleValue(fileDataQuery);
+                    string fileDataBase64 =
+                        db.GetSingleValue(fileDataQuery);
 
                     if (!string.IsNullOrEmpty(fileDataBase64))
                     {
@@ -4004,7 +5813,8 @@ namespace VRF_API.Services
 
                         try
                         {
-                            fileBytes = Convert.FromBase64String(fileDataBase64);
+                            fileBytes =
+                                Convert.FromBase64String(fileDataBase64);
                         }
                         catch
                         {
@@ -4014,7 +5824,8 @@ namespace VRF_API.Services
                                 null);
                         }
 
-                        string fileType = GetFileType(fileDataBase64);
+                        string fileType =
+                            GetFileType(fileDataBase64);
 
                         string fileName;
 
@@ -4022,7 +5833,8 @@ namespace VRF_API.Services
                         {
                             fileName = documentType + ".pdf";
                         }
-                        else if (fileType == "jpg" || fileType == "jpeg")
+                        else if (fileType == "jpg" ||
+                                 fileType == "jpeg")
                         {
                             fileName = documentType + ".jpg";
                         }
@@ -4035,7 +5847,8 @@ namespace VRF_API.Services
                             fileName = documentType;
                         }
 
-                        string folderPath = _configuration["Folder:Path"];
+                        string folderPath =
+                            _configuration["Folder:Path"];
 
                         if (string.IsNullOrWhiteSpace(folderPath))
                         {
@@ -4050,9 +5863,12 @@ namespace VRF_API.Services
                             Directory.CreateDirectory(folderPath);
                         }
 
-                        string filePath = Path.Combine(folderPath, fileName);
+                        string filePath =
+                            Path.Combine(folderPath, fileName);
 
-                        await File.WriteAllBytesAsync(filePath, fileBytes);
+                        await File.WriteAllBytesAsync(
+                            filePath,
+                            fileBytes);
 
                         _sessionManager.Set(
                             sessionViewPathKey,
@@ -4066,9 +5882,14 @@ namespace VRF_API.Services
                             sessionFileNameKey,
                             fileName);
 
-                        fileResultModel.FileBytes = fileBytes;
-                        fileResultModel.FileName = fileName;
-                        fileResultModel.ContentType = GetContentType(fileName);
+                        fileResultModel.FileBytes =
+                            fileBytes;
+
+                        fileResultModel.FileName =
+                            fileName;
+
+                        fileResultModel.ContentType =
+                            GetContentType(fileName);
 
                         return ApiResponseUtility.GenerateApiResponse(
                             ApiStatusEnum.Success,
@@ -4404,75 +6225,121 @@ namespace VRF_API.Services
                 return null;
             }
         }
-        public async Task<ApiResponse> ViewKYCFile(string file, string gstNo, string documentType)
+        public async Task<ApiResponse> ViewKYCFile(
+      string file,
+      string gstNo,
+      string documentType)
         {
             string functionName = "View_KYC_File";
 
-            log.WriteToLogFile_Debug($"Starting the function - {functionName}", functionName);
-            log.WriteToLogFile_Debug($"Request - Gst NO:{gstNo}, File - {file}, DocumentType-{documentType}", functionName);
+            log.WriteToLogFile_Debug(
+                $"Starting the function - {functionName}",
+                functionName);
+
+            log.WriteToLogFile_Debug(
+                $"Request - Gst NO:{gstNo}, File - {file}, DocumentType - {documentType}",
+                functionName);
 
             var fileResultModel = new FileResultModel();
 
             try
             {
+                // ============================================================
+                // VALIDATION
+                // ============================================================
+
+                if (string.IsNullOrWhiteSpace(documentType))
+                {
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        "Document type is required.",
+                        null);
+                }
+
+                //if (string.IsNullOrWhiteSpace(gstNo))
+                //{
+                //    return ApiResponseUtility.GenerateApiResponse(
+                //        ApiStatusEnum.Failure,
+                //        "GST number is required.",
+                //        null);
+                //}
+
+                // ============================================================
+                // SESSION KEYS
+                // ============================================================
+
+                string sessionPathKey =
+                    "Path_" + documentType;
+
+                string sessionBase64Key =
+                    "base64_" + documentType;
+
+                string sessionFileNameKey =
+                    "FileName_" + documentType;
+
+
+                // ============================================================
+                // 1. CHECK DATABASE DRAFT FILE
+                // ============================================================
+
                 string getIdQuery = $@"
-            select ifnull(""Id"",0)
-            from ""{sDBName}"".""TEC_OLED""
-            where ""GstNo""='{gstNo.Trim()}'";
+            SELECT IFNULL(""Id"", 0)
+            FROM ""{sDBName}"".""TEC_OLED""
+            WHERE ""GstNo"" = '{gstNo.Trim()}'";
 
                 string getId = db.GetSingleValue(getIdQuery);
 
-                if (!string.IsNullOrEmpty(getId) && getId != "0")
+                if (!string.IsNullOrEmpty(getId) &&
+                    getId != "0")
                 {
                     string draftQuery = $@"
-                select ""Draft""
-                from ""{sDBName}"".""TEC_OLED""
-                where ""Id""='{getId}'";
+                SELECT ""Draft""
+                FROM ""{sDBName}"".""TEC_OLED""
+                WHERE ""Id"" = '{getId}'";
 
                     string draft = db.GetSingleValue(draftQuery);
+
+                    // ========================================================
+                    // DRAFT = Y
+                    // ========================================================
 
                     if (draft == "Y")
                     {
                         string filePathQuery = $@"
-                    select ""FileData""
-                    from ""{sDBName}"".""TEC_LED7""
-                    where ""Id""='{getId}'
-                    and ""DocumentType""='{documentType}'";
+                    SELECT ""FileData""
+                    FROM ""{sDBName}"".""TEC_LED7""
+                    WHERE ""Id"" = '{getId}'
+                    AND ""DocumentType"" = '{documentType}'";
 
-                        string filePathFromDb = db.GetSingleValue(filePathQuery);
+                        string filePathFromDb =
+                            db.GetSingleValue(filePathQuery);
 
-                        if (!string.IsNullOrEmpty(filePathFromDb) && File.Exists(filePathFromDb))
+                        log.WriteToLogFile_Debug(
+                            $"File path from DB: {filePathFromDb}",
+                            functionName);
+
+                        if (!string.IsNullOrWhiteSpace(filePathFromDb) &&
+                            File.Exists(filePathFromDb))
                         {
-                            byte[] fileBytes = await File.ReadAllBytesAsync(filePathFromDb);
+                            byte[] fileBytes =
+                                await File.ReadAllBytesAsync(filePathFromDb);
 
-                            string fileName = Path.GetFileName(filePathFromDb);
+                            string fileName =
+                                Path.GetFileName(filePathFromDb);
 
-                            string folderPath = _configuration["Folder:Path"];
+                            fileResultModel.FileBytes =
+                                fileBytes;
 
-                            if (string.IsNullOrWhiteSpace(folderPath))
-                            {
-                                return ApiResponseUtility.GenerateApiResponse(
-                                    ApiStatusEnum.Failure,
-                                    "KYC document folder path is not configured.",
-                                    null);
-                            }
+                            fileResultModel.FileName =
+                                fileName;
 
-                            if (!Directory.Exists(folderPath))
-                            {
-                                Directory.CreateDirectory(folderPath);
-                            }
+                            fileResultModel.ContentType =
+                                GetContentType(fileName);
 
-                            string folderFilePath = Path.Combine(folderPath, fileName);
-
-                            await File.WriteAllBytesAsync(folderFilePath, fileBytes);
-
-                            string sessionPathKey = "Path_" + documentType;
-                            string sessionBase64Key = "base64_" + documentType;
-                            string sessionFileNameKey = "FileName_" + documentType;
-
+                            // Save into session
                             _sessionManager.Set(
                                 sessionPathKey,
-                                folderFilePath);
+                                filePathFromDb);
 
                             _sessionManager.Set(
                                 sessionBase64Key,
@@ -4482,10 +6349,6 @@ namespace VRF_API.Services
                                 sessionFileNameKey,
                                 fileName);
 
-                            fileResultModel.FileBytes = fileBytes;
-                            fileResultModel.FileName = fileName;
-                            fileResultModel.ContentType = GetContentType(fileName);
-
                             return ApiResponseUtility.GenerateApiResponse(
                                 ApiStatusEnum.Success,
                                 "Successfully retrieved the details",
@@ -4494,146 +6357,68 @@ namespace VRF_API.Services
                     }
                 }
 
-                string sessionPathKey1 = "Path_" + documentType;
-                string sessionBase64Key1 = "base64_" + documentType;
-                string sessionFileNameKey1 = "FileName_" + documentType;
 
-                var sessionPath = _sessionManager.Get(sessionPathKey1);
+                // ============================================================
+                // 2. CHECK SESSION PATH
+                // ============================================================
+
+                var sessionPath =
+                    _sessionManager.Get(sessionPathKey);
+
+                log.WriteToLogFile_Debug(
+                    $"Session Path Key: {sessionPathKey}",
+                    functionName);
+
+                log.WriteToLogFile_Debug(
+                    $"Session Path Value: {sessionPath}",
+                    functionName);
 
                 if (sessionPath != null &&
-                    !string.IsNullOrWhiteSpace(sessionPath.ToString()) &&
-                    File.Exists(sessionPath.ToString()))
+                    !string.IsNullOrWhiteSpace(sessionPath.ToString()))
                 {
-                    string tempPath = sessionPath.ToString();
+                    string tempPath =
+                        sessionPath.ToString();
 
-                    byte[] fileBytes = await File.ReadAllBytesAsync(tempPath);
+                    log.WriteToLogFile_Debug(
+                        $"Checking session file path: {tempPath}",
+                        functionName);
 
-                    string base64File = Convert.ToBase64String(fileBytes);
-
-                    _sessionManager.Set(
-                        sessionBase64Key1,
-                        base64File);
-
-                    string fileName = "";
-
-                    var sessionFileName =
-                        _sessionManager.Get(sessionFileNameKey1);
-
-                    if (sessionFileName != null &&
-                        !string.IsNullOrWhiteSpace(sessionFileName.ToString()))
+                    if (File.Exists(tempPath))
                     {
-                        fileName = sessionFileName.ToString();
-                    }
-                    else
-                    {
-                        fileName = Path.GetFileName(tempPath);
-                    }
+                        byte[] fileBytes =
+                            await File.ReadAllBytesAsync(tempPath);
 
-                    fileResultModel.FileBytes = fileBytes;
-                    fileResultModel.FileName = fileName;
-                    fileResultModel.ContentType = GetContentType(fileName);
+                        string fileName = "";
 
-                    return ApiResponseUtility.GenerateApiResponse(
-                        ApiStatusEnum.Success,
-                        "Successfully retrieved the details",
-                        fileResultModel);
-                }
+                        var sessionFileName =
+                            _sessionManager.Get(sessionFileNameKey);
 
-                string getId1Query = $@"
-            select ""Id""
-            from ""{sDBName}"".""TEC_OLED""
-            where ""GstNo""='{gstNo.Trim()}'";
-
-                string getId1 = db.GetSingleValue(getId1Query);
-
-                if (!string.IsNullOrEmpty(getId1))
-                {
-                    string fileDataBase64Query = $@"
-                select ""FileData""
-                from ""{sDBName}"".""TEC_LED7""
-                where ""Id""='{getId1}'
-                and ""DocumentType""='{documentType}'";
-
-                    string fileDataBase64 =
-                        db.GetSingleValue(fileDataBase64Query);
-
-                    if (!string.IsNullOrEmpty(fileDataBase64))
-                    {
-                        byte[] fileBytes;
-
-                        try
+                        if (sessionFileName != null &&
+                            !string.IsNullOrWhiteSpace(
+                                sessionFileName.ToString()))
                         {
-                            fileBytes =
-                                Convert.FromBase64String(fileDataBase64);
-                        }
-                        catch
-                        {
-                            return ApiResponseUtility.GenerateApiResponse(
-                                ApiStatusEnum.Failure,
-                                "Invalid file data.",
-                                null);
-                        }
-
-                        string fileType =
-                            GetFileType(fileDataBase64);
-
-                        string fileName;
-
-                        if (fileType == "pdf")
-                        {
-                            fileName = "tempDocument.pdf";
-                        }
-                        else if (fileType == "jpg" ||
-                                 fileType == "jpeg")
-                        {
-                            fileName = "tempImage.jpg";
-                        }
-                        else if (fileType == "png")
-                        {
-                            fileName = "tempImage.png";
+                            fileName =
+                                sessionFileName.ToString();
                         }
                         else
                         {
-                            fileName = "tempDocument";
+                            fileName =
+                                Path.GetFileName(tempPath);
                         }
 
-                        string folderPath =
-                            _configuration["Folder:Path"];
-
-                        if (string.IsNullOrWhiteSpace(folderPath))
-                        {
-                            return ApiResponseUtility.GenerateApiResponse(
-                                ApiStatusEnum.Failure,
-                                "KYC document folder path is not configured.",
-                                null);
-                        }
-
-                        if (!Directory.Exists(folderPath))
-                        {
-                            Directory.CreateDirectory(folderPath);
-                        }
-
-                        string filePath =
-                            Path.Combine(folderPath, fileName);
-
-                        await File.WriteAllBytesAsync(
-                            filePath,
-                            fileBytes);
+                        string base64File =
+                            Convert.ToBase64String(fileBytes);
 
                         _sessionManager.Set(
-                            sessionPathKey1,
-                            filePath);
+                            sessionBase64Key,
+                            base64File);
 
-                        _sessionManager.Set(
-                            sessionBase64Key1,
-                            fileDataBase64);
+                        fileResultModel.FileBytes =
+                            fileBytes;
 
-                        _sessionManager.Set(
-                            sessionFileNameKey1,
-                            fileName);
+                        fileResultModel.FileName =
+                            fileName;
 
-                        fileResultModel.FileBytes = fileBytes;
-                        fileResultModel.FileName = fileName;
                         fileResultModel.ContentType =
                             GetContentType(fileName);
 
@@ -4644,15 +6429,166 @@ namespace VRF_API.Services
                     }
                 }
 
+
+                // ============================================================
+                // 3. FALLBACK:
+                //    USE Folder:Path + FILE NAME
+                //
+                //    This is important for Performa Invoice.
+                // ============================================================
+
+                log.WriteToLogFile_Debug(
+                    "Session path not found. Trying configured folder path.",
+                    functionName);
+
+                string folderPath =
+                    _configuration["Folder:Path"];
+
+                if (string.IsNullOrWhiteSpace(folderPath))
+                {
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        "KYC document folder path is not configured.",
+                        null);
+                }
+
+
+                // ============================================================
+                // GET FILE NAME
+                // ============================================================
+
+                string fileNameFromRequest = "";
+
+                if (!string.IsNullOrWhiteSpace(file))
+                {
+                    fileNameFromRequest =
+                        Path.GetFileName(file.Trim());
+                }
+
+
+                // If file parameter is empty, try session filename
+                if (string.IsNullOrWhiteSpace(fileNameFromRequest))
+                {
+                    var sessionFileName =
+                        _sessionManager.Get(sessionFileNameKey);
+
+                    if (sessionFileName != null &&
+                        !string.IsNullOrWhiteSpace(
+                            sessionFileName.ToString()))
+                    {
+                        fileNameFromRequest =
+                            Path.GetFileName(
+                                sessionFileName.ToString().Trim());
+                    }
+                }
+
+
+                if (string.IsNullOrWhiteSpace(fileNameFromRequest))
+                {
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        "File name is required.",
+                        null);
+                }
+
+
+                // ============================================================
+                // BUILD PHYSICAL FILE PATH
+                // ============================================================
+
+                string folderFilePath =
+                    Path.Combine(
+                        folderPath,
+                        fileNameFromRequest);
+
+                log.WriteToLogFile_Debug(
+                    $"Folder Path: {folderPath}",
+                    functionName);
+
+                log.WriteToLogFile_Debug(
+                    $"File Name: {fileNameFromRequest}",
+                    functionName);
+
+                log.WriteToLogFile_Debug(
+                    $"Final File Path: {folderFilePath}",
+                    functionName);
+
+
+                // ============================================================
+                // CHECK FILE EXISTS
+                // ============================================================
+
+                if (!File.Exists(folderFilePath))
+                {
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        $"File not found: {folderFilePath}",
+                        null);
+                }
+
+
+                // ============================================================
+                // READ FILE
+                // ============================================================
+
+                byte[] finalFileBytes =
+                    await File.ReadAllBytesAsync(folderFilePath);
+
+                string finalFileName =
+                    Path.GetFileName(folderFilePath);
+
+                string finalBase64 =
+                    Convert.ToBase64String(finalFileBytes);
+
+
+                // ============================================================
+                // SAVE INTO SESSION
+                // ============================================================
+
+                _sessionManager.Set(
+                    sessionPathKey,
+                    folderFilePath);
+
+                _sessionManager.Set(
+                    sessionBase64Key,
+                    finalBase64);
+
+                _sessionManager.Set(
+                    sessionFileNameKey,
+                    finalFileName);
+
+
+                // ============================================================
+                // PREPARE RESPONSE
+                // ============================================================
+
+                fileResultModel.FileBytes =
+                    finalFileBytes;
+
+                fileResultModel.FileName =
+                    finalFileName;
+
+                fileResultModel.ContentType =
+                    GetContentType(finalFileName);
+
+
+                // ============================================================
+                // SUCCESS
+                // ============================================================
+
                 return ApiResponseUtility.GenerateApiResponse(
-                    ApiStatusEnum.Failure,
-                    "Please Upload the File First.",
-                    null);
+                    ApiStatusEnum.Success,
+                    "Successfully retrieved the details",
+                    fileResultModel);
             }
             catch (Exception ex)
             {
                 log.WriteToLogFile_Debug(
                     $"Error - {ex.Message}",
+                    functionName);
+
+                log.WriteToLogFile_Debug(
+                    $"Stack Trace - {ex.StackTrace}",
                     functionName);
 
                 return ApiResponseUtility.GenerateApiResponse(
@@ -4998,7 +6934,7 @@ namespace VRF_API.Services
                                             BusinessType =
                                                 reader["BusinessType"]?.ToString(),
 
-                                            AgencyEmail =
+                                            AgencyEMail =
                                                 reader["AgencyEmail"]?.ToString(),
 
                                             AgencyName =
@@ -5140,7 +7076,7 @@ namespace VRF_API.Services
                                             Size =
                                                 reader["Size"]?.ToString(),
 
-                                            Product =
+                                            ImageFile =
                                                 reader["Product"]?.ToString(),
 
                                             TaxPercentage =

@@ -26,12 +26,14 @@
 
 
 
-using VRF_API.Model.RequestModel;
-using VRF_API.ServiceRegistration;
-using VRF_API.Utilities;
+using DinkToPdf;
+using DinkToPdf.Contracts;
 using Serilog;
 using System.Data.Odbc;
+using VRF_API.Model.RequestModel;
 using VRF_API.ServiceRegistration;
+using VRF_API.ServiceRegistration;
+using VRF_API.Utilities;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -108,7 +110,11 @@ builder.Services.AddScoped<OdbcConnection>(sp =>
     return new OdbcConnection(connString);
 });
 
-
+builder.Services.AddSingleton<IConverter>(
+    new SynchronizedConverter(
+        new PdfTools()
+    )
+);
 
 var app = builder.Build();
 
