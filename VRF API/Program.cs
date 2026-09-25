@@ -32,24 +32,115 @@ using VRF_API.Utilities;
 using Serilog;
 using System.Data.Odbc;
 using VRF_API.ServiceRegistration;
+using Microsoft.Data.SqlClient;
+using System.Net;
+using VRF_API.Services;
+
+
+//var builder = WebApplication.CreateBuilder(args);
+
+//var logDirectory = builder.Configuration.GetValue<string>("Loggings:Log");
+
+//Directory.CreateDirectory(logDirectory); // Ensure the folder exists
+
+//Log.Logger = new LoggerConfiguration()
+//    .MinimumLevel.Information()
+//    .WriteTo.Console()
+//    .WriteTo.File(
+//        path: Path.Combine(logDirectory, "app-log-.txt"),
+//        rollingInterval: RollingInterval.Day,
+//        retainedFileCountLimit: null
+//    )
+//    .CreateLogger();
+//builder.Services.AddHttpClient();
+//builder.Services.Configure<SapSettings>(
+//    builder.Configuration.GetSection("SapSettings"));
+//builder.Services.Configure<LoginSettings>(
+//    builder.Configuration.GetSection("LoginSettings"));
+
+//Directory.CreateDirectory(logDirectory); // Ensure the folder exists
+
+//Log.Logger = new LoggerConfiguration()
+//    .MinimumLevel.Information()
+//    .WriteTo.Console()
+//    .WriteTo.File(
+//        path: Path.Combine(logDirectory, "app-log-.txt"),
+//        rollingInterval: RollingInterval.Day,
+//        retainedFileCountLimit: null
+//    )
+//    .CreateLogger();
+//builder.Services.AddApplicationServices(builder.Configuration);
+
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy("AllowReactApp", policy =>
+//    {
+//        policy.WithOrigins("http://localhost:3000")
+//              .AllowAnyMethod()
+//              .AllowAnyHeader()
+//              .AllowCredentials();
+//    });
+//});
+
+//// Add services to the container.
+//builder.Services.AddControllers();
+//builder.Services.AddHttpContextAccessor();
+//// Swagger
+//builder.Services.AddEndpointsApiExplorer();
+//builder.Services.AddSwaggerGen();
+//builder.Services.AddDistributedMemoryCache();
+
+//builder.Services.AddSession(options =>
+//{
+//    //options.IdleTimeout = TimeSpan.FromMinutes(LogoffTime);
+//    options.Cookie.HttpOnly = true;
+//    options.Cookie.IsEssential = true;
+
+//    options.Cookie.SameSite = SameSiteMode.None;
+//    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
+//});
+////builder.Services.AddScoped<SapConnection>();
+
+//// ⭐ Register OdbcConnection dependency
+//builder.Services.AddScoped<OdbcConnection>(sp =>
+//{
+//    var config = sp.GetRequiredService<IConfiguration>();
+//    string connString = config.GetConnectionString("HanaOdbc");
+
+//    return new OdbcConnection(connString);
+//});
+
+
+
+//var app = builder.Build();
+
+//app.UseCors("AllowReactApp");
+
+//// Configure HTTP request pipeline
+//if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
+//{
+//    app.UseDeveloperExceptionPage();
+//    app.UseSwagger();
+//    app.UseSwaggerUI();
+
+//}
+//app.UseCors("AllowReactApp");
+//app.UseSession();
+//app.UseHttpsRedirection();
+
+//app.UseAuthorization();
+
+//app.MapControllers();
+
+//app.Run();
+
 
 
 var builder = WebApplication.CreateBuilder(args);
+var logDirectory = builder.Configuration.GetValue<string>("Logging:LogDirectory")
+                   ?? Path.Combine(AppContext.BaseDirectory, "Logs");
 
-var logDirectory = builder.Configuration.GetValue<string>("Loggings:Log");
-
-Directory.CreateDirectory(logDirectory); // Ensure the folder exists
-
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .WriteTo.Console()
-    .WriteTo.File(
-        path: Path.Combine(logDirectory, "app-log-.txt"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: null
-    )
-    .CreateLogger();
-builder.Services.AddHttpClient();
 builder.Services.Configure<SapSettings>(
     builder.Configuration.GetSection("SapSettings"));
 builder.Services.Configure<LoginSettings>(
@@ -70,9 +161,9 @@ builder.Services.AddApplicationServices(builder.Configuration);
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:3001")
+        policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -84,19 +175,7 @@ builder.Services.AddHttpContextAccessor();
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddDistributedMemoryCache();
-
-builder.Services.AddSession(options =>
-{
-    //options.IdleTimeout = TimeSpan.FromMinutes(LogoffTime);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-
-    options.Cookie.SameSite = SameSiteMode.None;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-
-});
-//builder.Services.AddScoped<SapConnection>();
+builder.Services.AddScoped<OdbcConnection>();
 
 // ⭐ Register OdbcConnection dependency
 builder.Services.AddScoped<OdbcConnection>(sp =>
@@ -111,7 +190,7 @@ builder.Services.AddScoped<OdbcConnection>(sp =>
 
 var app = builder.Build();
 
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
 
 // Configure HTTP request pipeline
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
@@ -126,7 +205,6 @@ app.UseCors(x => x
     .AllowAnyMethod()
     .AllowAnyHeader()
 );
-app.UseSession();
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
@@ -134,4 +212,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-

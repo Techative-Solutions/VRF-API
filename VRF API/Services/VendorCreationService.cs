@@ -1,7 +1,9 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.AspNetCore.Hosting.Server;
+using Newtonsoft.Json;
 using RestSharp;
 
 using Serilog;
+using System;
 using System.Data;
 using System.Data.Common;
 using System.Data.Odbc;
@@ -24,6 +26,8 @@ namespace VRF_API.Services
     {
         Task<ApiResponse> LoadInitialValues();
         Task<ApiResponse> UploadKycFile(IFormFile file, string documentType, int rowIndex);
+        Task<ApiResponse> ViewKYCFile(string fileName, string gstNumber, string documentType);
+        Task<ApiResponse> DownloadKYCFile(string fileName, string gstNumber, string documentType);
     }
     public class VendorCreationService : IVendorCreationService
     {
@@ -42,6 +46,7 @@ namespace VRF_API.Services
         private readonly SessionManager _sessionManager;
         private readonly Log log;
         private readonly string dbName;
+        private readonly string sDBName;
         public VendorCreationService(IConfiguration configuration, OdbcConnection connection, IHttpContextAccessor httpContextAccessor, DbConnection _db, IRequestContext requestContext, SessionManager sessionManager, Log _log)
         {
             _configuration = configuration;
@@ -57,6 +62,7 @@ namespace VRF_API.Services
             _URL = _configuration.GetValue<string>("AppSettings:LoginURL") ?? string.Empty;
             _sessionManager = sessionManager;
             log = _log;
+            sDBName = _configuration["HanaSettings:DBName"];
             dbName = _configuration.GetValue<string>("HanaSettings:DBName");
         }
         public async Task<ApiResponse> LoadInitialValues()
@@ -92,7 +98,7 @@ namespace VRF_API.Services
             RefreshKYC();
             RefreshKYC1();
             //if (GSTNumber.Text != "") GSTNumber_TextChanged(sender, e);
-            if (_sessionManager.Get("DocumentDetails") == null)
+            if (_sessionManager.Get("DocumentDetails") == "")
             {
                 InitializeGrid();
             }
@@ -158,15 +164,8 @@ namespace VRF_API.Services
                     );
                 }
 
-                string folderPath = Path.Combine(
-                    Directory.GetCurrentDirectory(),
-                    "TempFiles"
-                );
-
-                if (!Directory.Exists(folderPath))
-                {
-                    Directory.CreateDirectory(folderPath);
-                }
+                string folderPath = _configuration["Folder:Path"]; if (string.IsNullOrWhiteSpace(folderPath)) { throw new Exception("Folder path is not configured in appsettings.json."); }
+                if (!Directory.Exists(folderPath)) { Directory.CreateDirectory(folderPath); }
 
                 string originalFileName = Path.GetFileName(file.FileName);
                 string fileNameWithoutExtension =
@@ -258,6 +257,187 @@ namespace VRF_API.Services
                     "Error while uploading file",
                     null
                 );
+            }
+        }
+        public async Task<ApiResponse> DownloadKYCFile(string file, string gstNo, string documentType)
+        {
+            string functionName = "Download_KYC_File";
+
+            log.WriteToLogFile_Debug(
+                $"Starting the function - {functionName}",
+                functionName);
+
+            log.WriteToLogFile_Debug(
+                $"Request - Gst NO:{gstNo}, File:{file}, DocumentType:{documentType}",
+                functionName);
+
+            var fileResultModel = new FileResultModel();
+
+            try
+            {
+                string sessionTempPathKey = "TempFilePath_" + documentType;
+                string sessionViewPathKey = "Path_" + documentType;
+                string sessionFileNameKey = "FileName_" + documentType;
+
+                var sessionViewPath = _sessionManager.Get(sessionViewPathKey);
+
+                if (sessionViewPath != null &&
+                    !string.IsNullOrWhiteSpace(sessionViewPath.ToString()) &&
+                    File.Exists(sessionViewPath.ToString()))
+                {
+                    string viewPath = sessionViewPath.ToString();
+
+                    byte[] fileBytes = await File.ReadAllBytesAsync(viewPath);
+
+                    string fileName = _sessionManager.Get(sessionFileNameKey) != null
+                        ? _sessionManager.Get(sessionFileNameKey).ToString()
+                        : Path.GetFileName(viewPath);
+
+                    fileResultModel.FileBytes = fileBytes;
+                    fileResultModel.FileName = fileName;
+                    fileResultModel.ContentType = GetContentType(fileName);
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "Successfully retrieved the file",
+                        fileResultModel);
+                }
+
+                var sessionTempPath = _sessionManager.Get(sessionTempPathKey);
+
+                if (sessionTempPath != null &&
+                    !string.IsNullOrWhiteSpace(sessionTempPath.ToString()) &&
+                    File.Exists(sessionTempPath.ToString()))
+                {
+                    string tempPath = sessionTempPath.ToString();
+
+                    byte[] fileBytes = await File.ReadAllBytesAsync(tempPath);
+
+                    string fileName = _sessionManager.Get(sessionFileNameKey) != null
+                        ? _sessionManager.Get(sessionFileNameKey).ToString()
+                        : Path.GetFileName(tempPath);
+
+                    fileResultModel.FileBytes = fileBytes;
+                    fileResultModel.FileName = fileName;
+                    fileResultModel.ContentType = GetContentType(fileName);
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "Successfully retrieved the file",
+                        fileResultModel);
+                }
+
+                string getIdQuery = $@"
+            select ifnull(""Id"",0)
+            from ""{sDBName}"".""TEC_OLED""
+            where ""GstNo""='{gstNo?.Trim()}'";
+
+                string getId = db.GetSingleValue(getIdQuery);
+
+                if (!string.IsNullOrEmpty(getId) && getId != "0")
+                {
+                    string fileDataQuery = $@"
+                select ""FileData""
+                from ""{sDBName}"".""TEC_LED7""
+                where ""Id""='{getId}'
+                and ""DocumentType""='{documentType}'";
+
+                    string fileDataBase64 = db.GetSingleValue(fileDataQuery);
+
+                    if (!string.IsNullOrEmpty(fileDataBase64))
+                    {
+                        byte[] fileBytes;
+
+                        try
+                        {
+                            fileBytes = Convert.FromBase64String(fileDataBase64);
+                        }
+                        catch
+                        {
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Failure,
+                                "Invalid file data.",
+                                null);
+                        }
+
+                        string fileType = GetFileType(fileDataBase64);
+
+                        string fileName;
+
+                        if (fileType == "pdf")
+                        {
+                            fileName = documentType + ".pdf";
+                        }
+                        else if (fileType == "jpg" || fileType == "jpeg")
+                        {
+                            fileName = documentType + ".jpg";
+                        }
+                        else if (fileType == "png")
+                        {
+                            fileName = documentType + ".png";
+                        }
+                        else
+                        {
+                            fileName = documentType;
+                        }
+
+                        string folderPath = _configuration["Folder:Path"];
+
+                        if (string.IsNullOrWhiteSpace(folderPath))
+                        {
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Failure,
+                                "KYC document folder path is not configured.",
+                                null);
+                        }
+
+                        if (!Directory.Exists(folderPath))
+                        {
+                            Directory.CreateDirectory(folderPath);
+                        }
+
+                        string filePath = Path.Combine(folderPath, fileName);
+
+                        await File.WriteAllBytesAsync(filePath, fileBytes);
+
+                        _sessionManager.Set(
+                            sessionViewPathKey,
+                            filePath);
+
+                        _sessionManager.Set(
+                            sessionTempPathKey,
+                            filePath);
+
+                        _sessionManager.Set(
+                            sessionFileNameKey,
+                            fileName);
+
+                        fileResultModel.FileBytes = fileBytes;
+                        fileResultModel.FileName = fileName;
+                        fileResultModel.ContentType = GetContentType(fileName);
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Success,
+                            "Successfully retrieved the file",
+                            fileResultModel);
+                    }
+                }
+
+                return ApiResponseUtility.GenerateApiResponse(
+                    ApiStatusEnum.Failure,
+                    "No file available to download.",
+                    null);
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"Error - {ex.Message}",
+                    functionName);
+
+                return ApiResponseUtility.GenerateApiResponse(
+                    ApiStatusEnum.Failure,
+                    "Unable to download the document.",
+                    null);
             }
         }
 
@@ -498,6 +678,299 @@ namespace VRF_API.Services
                 return null;
             }
         }
+        public async Task<ApiResponse> ViewKYCFile(string file, string gstNo, string documentType)
+        {
+            string functionName = "View_KYC_File";
+
+            log.WriteToLogFile_Debug($"Starting the function - {functionName}", functionName);
+            log.WriteToLogFile_Debug($"Request - Gst NO:{gstNo}, File - {file}, DocumentType-{documentType}", functionName);
+
+            var fileResultModel = new FileResultModel();
+
+            try
+            {
+                string getIdQuery = $@"
+            select ifnull(""Id"",0)
+            from ""{sDBName}"".""TEC_OLED""
+            where ""GstNo""='{gstNo.Trim()}'";
+
+                string getId = db.GetSingleValue(getIdQuery);
+
+                if (!string.IsNullOrEmpty(getId) && getId != "0")
+                {
+                    string draftQuery = $@"
+                select ""Draft""
+                from ""{sDBName}"".""TEC_OLED""
+                where ""Id""='{getId}'";
+
+                    string draft = db.GetSingleValue(draftQuery);
+
+                    if (draft == "Y")
+                    {
+                        string filePathQuery = $@"
+                    select ""FileData""
+                    from ""{sDBName}"".""TEC_LED7""
+                    where ""Id""='{getId}'
+                    and ""DocumentType""='{documentType}'";
+
+                        string filePathFromDb = db.GetSingleValue(filePathQuery);
+
+                        if (!string.IsNullOrEmpty(filePathFromDb) && File.Exists(filePathFromDb))
+                        {
+                            byte[] fileBytes = await File.ReadAllBytesAsync(filePathFromDb);
+
+                            string fileName = Path.GetFileName(filePathFromDb);
+
+                            string folderPath = _configuration["Folder:Path"];
+
+                            if (string.IsNullOrWhiteSpace(folderPath))
+                            {
+                                return ApiResponseUtility.GenerateApiResponse(
+                                    ApiStatusEnum.Failure,
+                                    "KYC document folder path is not configured.",
+                                    null);
+                            }
+
+                            if (!Directory.Exists(folderPath))
+                            {
+                                Directory.CreateDirectory(folderPath);
+                            }
+
+                            string folderFilePath = Path.Combine(folderPath, fileName);
+
+                            await File.WriteAllBytesAsync(folderFilePath, fileBytes);
+
+                            string sessionPathKey = "Path_" + documentType;
+                            string sessionBase64Key = "base64_" + documentType;
+                            string sessionFileNameKey = "FileName_" + documentType;
+
+                            _sessionManager.Set(
+                                sessionPathKey,
+                                folderFilePath);
+
+                            _sessionManager.Set(
+                                sessionBase64Key,
+                                Convert.ToBase64String(fileBytes));
+
+                            _sessionManager.Set(
+                                sessionFileNameKey,
+                                fileName);
+
+                            fileResultModel.FileBytes = fileBytes;
+                            fileResultModel.FileName = fileName;
+                            fileResultModel.ContentType = GetContentType(fileName);
+
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Success,
+                                "Successfully retrieved the details",
+                                fileResultModel);
+                        }
+                    }
+                }
+
+                string sessionPathKey1 = "Path_" + documentType;
+                string sessionBase64Key1 = "base64_" + documentType;
+                string sessionFileNameKey1 = "FileName_" + documentType;
+
+                var sessionPath = _sessionManager.Get(sessionPathKey1);
+
+                if (sessionPath != null &&
+                    !string.IsNullOrWhiteSpace(sessionPath.ToString()) &&
+                    File.Exists(sessionPath.ToString()))
+                {
+                    string tempPath = sessionPath.ToString();
+
+                    byte[] fileBytes = await File.ReadAllBytesAsync(tempPath);
+
+                    string base64File = Convert.ToBase64String(fileBytes);
+
+                    _sessionManager.Set(
+                        sessionBase64Key1,
+                        base64File);
+
+                    string fileName = "";
+
+                    var sessionFileName =
+                        _sessionManager.Get(sessionFileNameKey1);
+
+                    if (sessionFileName != null &&
+                        !string.IsNullOrWhiteSpace(sessionFileName.ToString()))
+                    {
+                        fileName = sessionFileName.ToString();
+                    }
+                    else
+                    {
+                        fileName = Path.GetFileName(tempPath);
+                    }
+
+                    fileResultModel.FileBytes = fileBytes;
+                    fileResultModel.FileName = fileName;
+                    fileResultModel.ContentType = GetContentType(fileName);
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "Successfully retrieved the details",
+                        fileResultModel);
+                }
+
+                string getId1Query = $@"
+            select ""Id""
+            from ""{sDBName}"".""TEC_OLED""
+            where ""GstNo""='{gstNo.Trim()}'";
+
+                string getId1 = db.GetSingleValue(getId1Query);
+
+                if (!string.IsNullOrEmpty(getId1))
+                {
+                    string fileDataBase64Query = $@"
+                select ""FileData""
+                from ""{sDBName}"".""TEC_LED7""
+                where ""Id""='{getId1}'
+                and ""DocumentType""='{documentType}'";
+
+                    string fileDataBase64 =
+                        db.GetSingleValue(fileDataBase64Query);
+
+                    if (!string.IsNullOrEmpty(fileDataBase64))
+                    {
+                        byte[] fileBytes;
+
+                        try
+                        {
+                            fileBytes =
+                                Convert.FromBase64String(fileDataBase64);
+                        }
+                        catch
+                        {
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Failure,
+                                "Invalid file data.",
+                                null);
+                        }
+
+                        string fileType =
+                            GetFileType(fileDataBase64);
+
+                        string fileName;
+
+                        if (fileType == "pdf")
+                        {
+                            fileName = "tempDocument.pdf";
+                        }
+                        else if (fileType == "jpg" ||
+                                 fileType == "jpeg")
+                        {
+                            fileName = "tempImage.jpg";
+                        }
+                        else if (fileType == "png")
+                        {
+                            fileName = "tempImage.png";
+                        }
+                        else
+                        {
+                            fileName = "tempDocument";
+                        }
+
+                        string folderPath =
+                            _configuration["Folder:Path"];
+
+                        if (string.IsNullOrWhiteSpace(folderPath))
+                        {
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Failure,
+                                "KYC document folder path is not configured.",
+                                null);
+                        }
+
+                        if (!Directory.Exists(folderPath))
+                        {
+                            Directory.CreateDirectory(folderPath);
+                        }
+
+                        string filePath =
+                            Path.Combine(folderPath, fileName);
+
+                        await File.WriteAllBytesAsync(
+                            filePath,
+                            fileBytes);
+
+                        _sessionManager.Set(
+                            sessionPathKey1,
+                            filePath);
+
+                        _sessionManager.Set(
+                            sessionBase64Key1,
+                            fileDataBase64);
+
+                        _sessionManager.Set(
+                            sessionFileNameKey1,
+                            fileName);
+
+                        fileResultModel.FileBytes = fileBytes;
+                        fileResultModel.FileName = fileName;
+                        fileResultModel.ContentType =
+                            GetContentType(fileName);
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Success,
+                            "Successfully retrieved the details",
+                            fileResultModel);
+                    }
+                }
+
+                return ApiResponseUtility.GenerateApiResponse(
+                    ApiStatusEnum.Failure,
+                    "Please Upload the File First.",
+                    null);
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"Error - {ex.Message}",
+                    functionName);
+
+                return ApiResponseUtility.GenerateApiResponse(
+                    ApiStatusEnum.Failure,
+                    "Unable to retrieve the document.",
+                    null);
+            }
+        }
+        private string GetFileTypeFromExtension(string filePath)
+        {
+            string extension = Path.GetExtension(filePath).ToLower();
+            switch (extension)
+            {
+                case ".pdf":
+                    return "pdf";
+                case ".jpg":
+                case ".jpeg":
+                    return "jpg";
+                case ".png":
+                    return "png";
+                default:
+                    return "unknown";
+            }
+        }
+        private string GetContentType(string extension)
+        {
+            switch (extension.ToLower())
+            {
+                case ".pdf": return "application/pdf";
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".png": return "image/png";
+                default: return "application/octet-stream";
+            }
+        }
+        private string GetFileType(string documentType)
+        {
+            if (documentType.Length >= 4 && documentType.Substring(0, 4).Equals("JVBE", StringComparison.OrdinalIgnoreCase))
+            {
+                return "pdf"; // Return pdf if the first four characters are "JVBE"
+            }
+
+            return "image";
+        }
         private void BindOtherInformation()
         {
             var otherInformation = new List<OtherInformation>{
@@ -554,7 +1027,8 @@ namespace VRF_API.Services
             log.WriteToLogFile_Debug($"{functionName} - Starting the function", functionName);
             try
             {
-                string sp = "CALL \"GetContactTypes\"";
+                string sp = $@"CALL ""{sDBName}"".""GetContactTypes""";
+
                 log.WriteToLogFile_Debug($"{sp} - Calling the sp to fetch the contact persons", functionName);
                 DataTable dt = db.ExecuteQueryForDataTable(sp);
 
@@ -671,17 +1145,17 @@ namespace VRF_API.Services
             string[] documentTypes ={"PAN Card","GST Certificate","Bank Account","MSME Certificate"};
             foreach (var documentType in documentTypes)
             {
-                _sessionManager.Set($"Path_{documentType}",null);
-                _sessionManager.Set($"base64_{documentType}",null);
-                _sessionManager.Set($"FileName_{documentType}",null);
+                _sessionManager.Set($"Path_{documentType}","");
+                _sessionManager.Set($"base64_{documentType}","");
+                _sessionManager.Set($"FileName_{documentType}","");
             }
         }
         public void RefreshKYC1()
         {
             string documentType = "Performa Invoice";
-            _sessionManager.Set($"Path_{documentType}",null);
-            _sessionManager.Set($"base64_{documentType}",null);
-            _sessionManager.Set($"FileName_{documentType}",null );
+            _sessionManager.Set($"Path_{documentType}","");
+            _sessionManager.Set($"base64_{documentType}","");
+            _sessionManager.Set($"FileName_{documentType}","" );
         }
         private void InitializeGrid()
         {

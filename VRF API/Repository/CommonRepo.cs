@@ -158,5 +158,18 @@
             public string? pan_no { get; set; }
             public string? date_of_incorporation { get; set; }
         }
+        public class ViewKYCFile
+        {
+            public string fileName { get; set; }
+            public string gstNumber { get; set; }
+            public string documentType { get; set; }
+        }
+
+        public class FileResultModel
+        {
+            public byte[] FileBytes { get; set; }
+            public string FileName { get; set; }
+            public string ContentType { get; set; }
+        }
     }
 }
