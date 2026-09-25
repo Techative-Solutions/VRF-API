@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Caching.Distributed;
+﻿using DinkToPdf;
+using DinkToPdf.Contracts;
+using Microsoft.Extensions.Caching.Distributed;
 using VRF_API.Authentication;
 using VRF_API.Configuration;
 using VRF_API.Repository;
@@ -25,6 +27,9 @@ namespace VRF_API.ServiceRegistration
             services.AddScoped<IRequestContext, RequestContext>();
             services.AddScoped<DbConnection>();
             services.AddScoped<SessionManager>();
+            services.AddSingleton<IConverter>(
+    new SynchronizedConverter(new PdfTools())
+);
 
             return services;
         }
