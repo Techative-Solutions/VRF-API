@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Xml.Linq;
 using VRF_API.Services;
+using static VRF_API.Model.ResponseModel.EnumResponse;
+using VRF_API.Utilities;
 using static VRF_API.Repository.CommonRepo;
 
 namespace VRF_API.Controllers
@@ -78,6 +80,121 @@ namespace VRF_API.Controllers
                 enableRangeProcessing: true);
         }
 
+        [HttpPost]
+        [Route("NextPageCheck")]
+        public async Task<IActionResult> NextPageCheck(NextPageCheckRequest request)
+        {
+            var response = await _vendorCreationService.NextPageCheck(request.gstNumber, request.page);
+            return Ok(response);
+        }
+
+        [HttpPost]
+        [Route("GstNumberCheck")]
+        public async Task<IActionResult> GSTNumberCheck(GstNumberCheckRequest request)
+        {
+            var response = await _vendorCreationService.GSTNumberCheck(request.gstNumber);
+            return Ok(response);
+        }
+        [HttpPost]
+        [Route("SaveDraft")]
+        public async Task<IActionResult> SaveDraft(SaveDraftRequest request)
+        {
+            var response = await _vendorCreationService.SaveDraft(request.Page, request.FormData, request.UploadedFiles);
+            return Ok(response);
+        }
+        [HttpGet("GetStatesByCountry")]
+        public IActionResult GetStatesByCountry(string countryCode)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(countryCode))
+                {
+                    return BadRequest(
+                        ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "Country code is required",
+                            null
+                        )
+                    );
+                }
+
+                var states =
+                    _vendorCreationService.GetStatesByCountry(countryCode);
+
+                return Ok(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "States fetched successfully",
+                        states
+                    )
+                );
+            }
+            catch (Exception ex)
+            {
+                
+
+                return StatusCode(
+                    500,
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        "Error while fetching states",
+                        null
+                    )
+                );
+            }
+        }
+        [HttpPost("SendOTP")]
+        public async Task<IActionResult> SendOTP(
+     [FromBody] SendOtpRequest request)
+        {
+            try
+            {
+                await _vendorCreationService.SendOTP(request);
+
+                return Ok(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "OTP sent successfully.",
+                        null));
+            }
+            catch (Exception ex)
+            {
+               
+
+                return BadRequest(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        ex.Message,
+                        null));
+            }
+        }
+
+
+        [HttpPost("VerifyOTP")]
+        public async Task<IActionResult> VerifyOTP(
+            [FromBody] VerifyOtpRequest request)
+        {
+            try
+            {
+                await _vendorCreationService.VerifyOTP(request);
+
+                return Ok(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        "OTP verified successfully.",
+                        null));
+            }
+            catch (Exception ex)
+            {
+               
+                return BadRequest(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        ex.Message,
+                        null));
+            }
+        }
+
         [HttpGet]
         [Route("DownloadKYCFile")]
         public async Task<IActionResult> DownloadKYCFile(
@@ -124,7 +241,36 @@ namespace VRF_API.Controllers
             };
         }
 
-       
 
+        [HttpPost("SubmitVendor")]
+        public async Task<IActionResult> SubmitVendor(
+    [FromBody] SubmitVendorRequest request)
+        {
+            try
+            {
+               
+
+                var result = await _vendorCreationService.SubmitVendor(request);
+
+                return Ok(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Success,
+                        result.Message,
+                        result
+                    )
+                );
+            }
+            catch (Exception ex)
+            {
+                
+                return BadRequest(
+                    ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        ex.Message,
+                        null
+                    )
+                );
+            }
+        }
     }
 }
