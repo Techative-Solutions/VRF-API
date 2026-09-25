@@ -27,10 +27,15 @@ namespace VRF_API.ServiceRegistration
             services.AddScoped<IRequestContext, RequestContext>();
             services.AddScoped<DbConnection>();
             services.AddScoped<SessionManager>();
+            services.AddScoped<IRejectionForm, RejectionForm>();
+            services.AddScoped<IApprovalService, ApprovalService>();
+            services.AddScoped<IRegistrationForm, RegistrationForm>();
+            services.AddScoped<IReport, Report>();
             services.AddSingleton<IConverter>(
     new SynchronizedConverter(new PdfTools())
 );
 
+         
             return services;
         }
     }

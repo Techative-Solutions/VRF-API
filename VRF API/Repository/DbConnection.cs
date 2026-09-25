@@ -96,6 +96,35 @@ namespace VRF_API.Repository
                 }
             }
         }
+
+
+        public string ExecuteNonQuery(string sQuery)
+        {
+            string SAP_Constr = sConstr;
+
+            using (OdbcConnection oCon = new OdbcConnection(SAP_Constr))
+            using (OdbcCommand oCmd = new OdbcCommand())
+            {
+                try
+                {
+                    oCmd.CommandType = CommandType.Text;
+                    oCmd.CommandText = sQuery;
+                    oCmd.Connection = oCon;
+                    oCmd.CommandTimeout = 0;
+
+                    oCon.Open();
+
+                    oCmd.ExecuteNonQuery();
+
+                    return "Success";
+                }
+                catch (Exception ex)
+                {
+                    throw;
+                }
+            }
+        }
+
         public DataTable ExecuteQueryForDataTable(string sQuery)
         {
             String sFuncName = "HanaExecuteQueryReturnDataTable";
