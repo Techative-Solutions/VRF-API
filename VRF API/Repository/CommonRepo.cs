@@ -46,7 +46,7 @@ namespace VRF_API.Repository
             public string HSNCode { get; set; }
             public string Brand { get; set; }
             public string Size { get; set; }
-            public string Product { get; set; }
+            public string ImageFile { get; set; }
             public string TaxPercentage { get; set; }
         }
         public class MajorCustomers
@@ -361,7 +361,7 @@ namespace VRF_API.Repository
             public string? MarkDownWithoutTax18 { get; set; }
 
             public string? BusinessType { get; set; }
-            public string? AgencyEmail { get; set; }
+            public string? AgencyEMail { get; set; }
             public string? AgencyName { get; set; }
         }
         public class VendorEditDetailsDto
@@ -391,6 +391,13 @@ namespace VRF_API.Repository
             public string BranchCode { get; set; }
 
             public string BankAddress { get; set; }
+        }
+        public class SaveRequest
+        {
+            public string GstNumber { get; set; }
+            public PaymentDetailsModel? PaymentDetails { get; set; }
+            public List<string> UploadedFiles { get; set; }
+            public List<MajorGoodsServiceModel> MajorGoodsServices { get; set; }
         }
 
         public class SaveDraftRequest
@@ -502,6 +509,7 @@ namespace VRF_API.Repository
 
             public List<MajorGoodsServiceModel> MajorGoodsServices { get; set; }
             public List<MajorCustomerDto> MajorCustomers { get; set; }
+            public List<OtherInformation> OtherInformation { get; set; }
         }
 
 
@@ -594,7 +602,7 @@ namespace VRF_API.Repository
 
             public string TypeOfVendor { get; set; }
 
-            public string BusinessType { get; set; }
+            public string? BusinessType { get; set; }
 
             public string AgencyName { get; set; }
 
@@ -604,7 +612,7 @@ namespace VRF_API.Repository
 
             public string BillLevelDiscount { get; set; }
 
-            public string DisCount { get; set; }
+            public string? DisCount { get; set; }
 
             public string MarkDownWithTax0 { get; set; }
 
@@ -730,7 +738,7 @@ namespace VRF_API.Repository
 
             public string MsmeCertificate { get; set; }
 
-            public string PerformaInvoice { get; set; }
+            public List<string> PerformaInvoice { get; set; } = new();
         }
 
         //public class VendorDetails

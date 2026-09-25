@@ -50,6 +50,96 @@ namespace VRF_API.Controllers
         //    var response = await _vendorCreationService.ViewKYCFile(request.fileName, request.gstNumber, request.documentType);
         //    return Ok(response);
         //}
+        [HttpGet("ViewProductImage")]
+        public IActionResult ViewProductImage([FromQuery] string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return BadRequest("File name is required.");
+            }
+
+            var folderPath =_configuration["Folder:ImagePath"];
+
+            var fullPath = Path.Combine(folderPath, fileName);
+
+            if (!System.IO.File.Exists(fullPath))
+            {
+                return NotFound("Image not found.");
+            }
+
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+
+            var contentType = extension switch
+            {
+                ".jpg" => "image/jpeg",
+                ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                _ => "application/octet-stream"
+            };
+
+            return PhysicalFile(
+                fullPath,
+                contentType
+            );
+        }
+
+        [HttpPost("UploadProductImage")]
+        public async Task<IActionResult> UploadProductImage(
+    IFormFile file,
+    [FromForm] string documentType,
+    [FromForm] int rowIndex)
+        { 
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            var folderPath = _configuration["Folder:ImagePath"];
+
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return BadRequest("Image upload path is not configured.");
+            }
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            var extension = Path.GetExtension(file.FileName);
+
+            var originalName = Path.GetFileNameWithoutExtension(file.FileName);
+
+            // Generate exactly 4 random digits
+            var randomNumber = Random.Shared.Next(1000, 10000);
+
+            var fileName = $"{originalName}_{randomNumber}{extension}";
+
+            var physicalPath = Path.Combine(
+                folderPath,
+                fileName
+            );
+
+            using (var stream = new FileStream(
+                physicalPath,
+                FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            return Ok(new
+            {
+                status = 0,
+                message = "Product image uploaded successfully.",
+                data = new
+                {
+                    fileName = fileName,
+                    filePath = physicalPath,
+                    documentType = documentType,
+                    rowIndex = rowIndex
+                }
+            });
+        }
         [HttpGet]
         [Route("ViewKYCFile")]
         public async Task<IActionResult> ViewKYCFile(
@@ -102,6 +192,7 @@ namespace VRF_API.Controllers
             var response = await _vendorCreationService.SaveDraft(request.Page, request.FormData, request.UploadedFiles);
             return Ok(response);
         }
+
         [HttpGet("GetStatesByCountry")]
         public IActionResult GetStatesByCountry(string countryCode)
         {
@@ -272,5 +363,54 @@ namespace VRF_API.Controllers
                 );
             }
         }
+        [HttpPost("SaveNewProduct")]
+        public async Task<IActionResult> SaveNewProduct(
+             [FromBody] SaveRequest request)
+        {
+            try
+            {
+                if (request == null)
+                {
+                    return BadRequest(new
+                    {
+                        errorCode = 400,
+                        message = "Request cannot be null."
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(request.GstNumber))
+                {
+                    return BadRequest(new
+                    {
+                        errorCode = 400,
+                        message = "GST Number is required."
+                    });
+                }
+
+                var result =
+                    await _vendorCreationService
+                        .SaveNewProductAsync(request);
+
+                return Ok(new
+                {
+                    errorCode = 200,
+                    message = "Product details saved successfully.",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new
+                    {
+                        errorCode = 500,
+                        message = "Unable to save product details.",
+                        error = ex.Message
+                    });
+            }
+        }
+
+
     }
 }
