@@ -25,6 +25,8 @@ using Newtonsoft.Json.Linq;
 using RestSharp;
 using System.Net.Http;
 using Microsoft.Extensions.Configuration;
+using DbConnection = VRF_API.Repository.DbConnection;
+using Attachment = System.Net.Mail.Attachment;
 
 
 namespace VRF_API.Services
@@ -62,16 +64,20 @@ namespace VRF_API.Services
         private readonly OdbcConnection _connection;
         private readonly string sDBName;
         private readonly string _anotherDbName;
+        private readonly DbConnection db;
         private readonly string sConstr;
+        private readonly SessionManager _sessionManager;
+        public string mailTemplate = string.Empty;
         string CN1, CN2, CV1, CV2;
-        public RegistrationForm(IConfiguration configuration, OdbcConnection connection, Repository.Log _log)
+        public RegistrationForm(SessionManager sessionManager,IConfiguration configuration, OdbcConnection connection, Repository.Log _log, DbConnection _db)
         {
             _configuration = configuration;
             _connection = connection;
             sDBName = _configuration["HanaSettings:DBName"];
             sConstr = _configuration["ConnectionStrings:HanaOdbc"];
             log = _log;
-
+            db = _db;
+            _sessionManager = sessionManager;
         }
 
 
@@ -813,14 +819,14 @@ string userName)
                     };
 
                     string json = JsonConvert.SerializeObject(wrapper, Formatting.Indented);
-                    // writeLog("Attachment Json : " + json, "VendorCreation");
+                    //  log.WriteToLogFile_Debug("Attachment Json : " + json, "VendorCreation");
                     string Discount = GetSingleValue($@"Select ifnull(""DisCount"",'0') from ""{DBName}"".""PaymentDetails"" where ""Id"" = '{dataTable1.Rows[i]["Id"].ToString()}'");
-                    // writeLog("Discount : " + Discount, "VendorCreation");
+                    //  log.WriteToLogFile_Debug("Discount : " + Discount, "VendorCreation");
                     if (string.IsNullOrEmpty(Discount)) Discount = "0";
                     string CreditDays = GetSingleValue($@"Call ""{DBName}"".""TEC_GetCreditDaysDetails""('" + dataTable1.Rows[i]["Id"].ToString() + "')") != "" ? GetSingleValue($@"Call ""{DBName}"".""TEC_GetCreditDaysDetails""('" + dataTable1.Rows[i]["Id"].ToString() + "')") : "0";
-                    //writeLog("CreditDays : " + CreditDays, "VendorCreation");
+                    // log.WriteToLogFile_Debug("CreditDays : " + CreditDays, "VendorCreation");
                     string creditcode = GetSingleValue($@"Select Trim(""CreditDays"") from ""{DBName}"".""PaymentDetails"" where ""Id""='" + dataTable1.Rows[i]["Id"].ToString() + "'");
-                    //writeLog("CreditCode : " + creditcode, "VendorCreation");
+                    // log.WriteToLogFile_Debug("CreditCode : " + creditcode, "VendorCreation");
                     string creditDaysNumber = new string(CreditDays.Where(char.IsDigit).ToArray());
 
                     // creditCode is already numeric, but still clean it just in case
@@ -830,17 +836,17 @@ string userName)
                     string result = (creditDaysNumber == creditCodeNumber) ? "nodefault" : "default";
 
                     string GroupNum = GetSingleValue($@"call ""{DBName}"".""TEC_GetGroupNum"" ('" + CreditDays + "')") != "" ? GetSingleValue($@"call ""{DBName}"".""TEC_GetGroupNum"" ('" + CreditDays + "')") : "0";
-                    //writeLog("GroupNum : " + GroupNum, "VendorCreation");
-                    //writeLog("GroupCode : " + groupCode, "VendorCreation");
+                    // log.WriteToLogFile_Debug("GroupNum : " + GroupNum, "VendorCreation");
+                    // log.WriteToLogFile_Debug("GroupCode : " + groupCode, "VendorCreation");
                     string Remarks = GetSingleValue($@"Call ""{DBName}"".""GetRemarks""('" + dataTable1.Rows[i]["GstNo"].ToString() + "')");
-                    //writeLog("Remarks : " + Remarks, "VendorCreation");
+                    // log.WriteToLogFile_Debug("Remarks : " + Remarks, "VendorCreation");
                     string rDoc = "0";
                     string sessionId = Login(TransURL, DB, user, Pass, out StrRouteVal);
                     string strRoutevalue = "";
                     string Result = TransactionPosting(TransURL + "Attachments2", json, sessionId, "Attachment", strRoutevalue, DB);
-                    // writeLog("Attachment Result : " + Result, "VendorCreation");
+                    //  log.WriteToLogFile_Debug("Attachment Result : " + Result, "VendorCreation");
                     int AbsEntry = Convert.ToInt32(Result);
-                    // writeLog("Attachment Entry : " + AbsEntry, "VendorCreation");
+                    //  log.WriteToLogFile_Debug("Attachment Entry : " + AbsEntry, "VendorCreation");
                     Id = dataTable1.Rows[i]["Id"].ToString();
                     Vendor1 vendor = new Vendor1
                     {
@@ -1008,7 +1014,8 @@ string userName)
 
                         ExecuteNonQuery(update);
 
-                        //SentMail(toMail, gstNumber, dataTable1.Rows[i]["CardCode"].ToString());
+                        SentMail(toMail, gstNumber, dataTable1.Rows[i]["CardCode"].ToString());
+
 
                         ExecuteNonQuery($@"Insert into ""{sDBName}"".""Mail_Log"" (""GstNo"",""Type"",""ActionDate"") values('{dataTable1.Rows[i]["GstNo"].ToString()}','Created',Current_Date)");
                     }
@@ -1066,11 +1073,574 @@ string userName)
                 Console.WriteLine("Disconnected from SAP Business One.");
             }
         }
+        private async Task<(bool Success, string Message)> SentMail(
+      string toMail,
+      string selectedGST,
+      string cardCode)
+        {
+            try
+            {
+                string gstNo = selectedGST?.Trim() ?? "";
 
+                if (string.IsNullOrWhiteSpace(gstNo))
+                {
+                    return (false, "GST Number is required.");
+                }
+
+                log.WriteToLogFile_Debug(
+                    "SendVendorMail started",
+                    "Mail"
+                );
+
+                // =====================================================
+                // GET VENDOR DETAILS
+                // =====================================================
+
+                DataTable ds = GetVendorDetails(gstNo);
+
+                if (ds == null || ds.Rows.Count == 0)
+                {
+                    return (false, "Vendor details not found.");
+                }
+
+                DataRow dr = ds.Rows[0];
+
+                var data = new Dictionary<string, object>();
+
+                // =====================================================
+                // BASIC INFORMATION
+                // =====================================================
+
+                data["GST Number"] =
+                    dr["GstNo"]?.ToString() ?? "";
+
+                data["PAN Number"] =
+                    dr["PanNo"]?.ToString() ?? "";
+
+                data["Trade Name"] =
+                    dr["TName"]?.ToString() ?? "";
+
+                data["Nature of Business"] =
+                    dr["NatureOfBusinessActivity"]?.ToString() ?? "";
+
+                data["Date of Establishment"] =
+                    dr["DateOfEstablishment"]?.ToString() ?? "";
+
+                data["NHFS Contact Person"] =
+                    dr["ContactPerson"]?.ToString() ?? "";
+
+                data["Designation"] =
+                    dr["DeclarationDesignation"]?.ToString() ?? "";
+
+                data["Email ID"] =
+                    dr["EmailId"]?.ToString() ?? "";
+
+                data["Mobile Number"] =
+                    dr["MobileNo"]?.ToString() ?? "";
+
+                data["Office Telephone"] =
+                    dr["VerificationNo"]?.ToString() ?? "";
+
+                data["TAN Number"] =
+                    dr["TANNo"]?.ToString() ?? "";
+
+                data["Contact Person"] =
+                    dr["ContactPersonName"]?.ToString() ?? "";
+
+                // =====================================================
+                // ADDRESS DETAILS
+                // =====================================================
+
+                data["Registered Address"] =
+                    $"{dr["Raddress1"]}," +
+                    $"{dr["Raddress2"]}," +
+                    $"{dr["Raddress3"]}," +
+                    $"{dr["registeredOfficeCity"]}," +
+                    $"{dr["Rstate"]}," +
+                    $"{dr["Rcountry"]}-" +
+                    $"{dr["Rzipcode"]}";
+
+                data["Billing Address"] =
+                    $"{dr["Baddress1"]}," +
+                    $"{dr["Baddress2"]}," +
+                    $"{dr["Baddress3"]}," +
+                    $"{dr["businessBillingCity"]}," +
+                    $"{dr["Bstate"]}," +
+                    $"{dr["Bcountry"]}-" +
+                    $"{dr["Bzipcode"]}";
+
+                data["Shipping Address"] =
+                    $"{dr["Saddress1"]}," +
+                    $"{dr["Saddress2"]}," +
+                    $"{dr["Saddress3"]}," +
+                    $"{dr["Scity"]}," +
+                    $"{dr["Sstate"]}," +
+                    $"{dr["Scountry"]}-" +
+                    $"{dr["Szipcode"]}";
+
+                data["Goods Return Address"] =
+                    $"{dr["Gaddress1"]}," +
+                    $"{dr["Gaddress2"]}," +
+                    $"{dr["Gaddress3"]}," +
+                    $"{dr["Gcity"]}," +
+                    $"{dr["Gstate"]}," +
+                    $"{dr["Gcountry"]}-" +
+                    $"{dr["Gzipcode"]}";
+
+                // =====================================================
+                // BANK DETAILS
+                // =====================================================
+
+                data["Bank Name"] =
+                    dr["BankName"]?.ToString() ?? "";
+
+                data["Account Name"] =
+                    dr["AccountName"]?.ToString() ?? "";
+
+                data["Account Number"] =
+                    dr["AccountNumber"]?.ToString() ?? "";
+
+                data["IFSC Code"] =
+                    dr["IfscCode"]?.ToString() ?? "";
+
+                data["Branch Code"] =
+                    dr["BranchCode"]?.ToString() ?? "";
+
+                data["Bank Address"] =
+                    dr["BankAddress"]?.ToString() ?? "";
+
+                // =====================================================
+                // MSME
+                // =====================================================
+
+                data["MSME Status"] =
+                    dr["MsmeRegistrationStatus"]?.ToString() ?? "";
+
+                data["MSME Number"] =
+                    dr["MSMENo"]?.ToString() ?? "";
+
+                data["Enterprise Type"] =
+                    dr["EnterpriseType"]?.ToString() ?? "";
+
+                // =====================================================
+                // REMARKS
+                // =====================================================
+
+                string remarks = db.GetSingleValue(
+                    $@"Call ""{sDBName}"".""GetRemarks""('{gstNo}')"
+                );
+
+                data["Remarks"] = remarks ?? "";
+
+                // =====================================================
+                // DATE / LOCATION
+                // =====================================================
+
+                data["date"] =
+                    DateTime.Now.ToString("yyyy-MM-dd");
+
+                data["location"] = "TamilNadu";
+
+                // =====================================================
+                // PAYMENT DETAILS
+                // =====================================================
+
+                string id = db.GetSingleValue(
+                    $@"select * 
+               from ""{sDBName}"".""TEC_OLED"" 
+               where ""GstNo""='{gstNo}'"
+                );
+
+                DataTable paymentTable =
+                    db.ExecuteQueryForDataTable(
+                        $@"Select * 
+                   from ""{sDBName}"".""PaymentDetails"" 
+                   where ""Id""='{id}'"
+                    );
+
+                if (paymentTable != null &&
+                    paymentTable.Rows.Count > 0)
+                {
+                    DataRow paymentRow =
+                        paymentTable.Rows[0];
+
+                    data["Credit Days"] =
+                        paymentRow["CreditDays"]?.ToString() ?? "";
+
+                    data["Discount"] =
+                        paymentRow["DisCount"]?.ToString() ?? "";
+
+                    data["md0_with"] =
+                        paymentRow["MarkDownTax0"]?.ToString() ?? "";
+
+                    data["md0_without"] =
+                        paymentRow["MarkDownWithoutTax0"]?.ToString() ?? "";
+
+                    data["md3_with"] =
+                        paymentRow["MarkDownTax3"]?.ToString() ?? "";
+
+                    data["md3_without"] =
+                        paymentRow["MarkDownWithoutTax3"]?.ToString() ?? "";
+
+                    data["md5_with"] =
+                        paymentRow["MarkDownTax5"]?.ToString() ?? "";
+
+                    data["md5_without"] =
+                        paymentRow["MarkDownWithoutTax5"]?.ToString() ?? "";
+
+                    data["md18_with"] =
+                        paymentRow["MarkDownTax18"]?.ToString() ?? "";
+
+                    data["md18_without"] =
+                        paymentRow["MarkDownWithoutTax18"]?.ToString() ?? "";
+                }
+
+                // =====================================================
+                // BUSINESS / AGENCY
+                // =====================================================
+
+                data["Business Type"] =
+                    dr["BusinessType"]?.ToString() ?? "";
+
+                data["Agency Email"] =
+                    dr["AgencyEmail"]?.ToString() ?? "";
+
+                data["Agency Name"] =
+                    dr["AgencyName"]?.ToString() ?? "";
+
+                string agentMail =
+                    dr["AgencyEmail"]?.ToString() ?? "";
+
+                // =====================================================
+                // DECLARATION
+                // =====================================================
+
+                data["Name"] =
+                    dr["DeclarationName"]?.ToString() ?? "";
+
+                data["Designation"] =
+                    dr["DeclarationDesignation"]?.ToString() ?? "";
+
+                data["Mobile No"] =
+                    dr["VerificationNo"]?.ToString() ?? "";
+
+                data["Code"] =
+                    cardCode ?? "";
+
+                // =====================================================
+                // MAJOR GOODS
+                // =====================================================
+
+                List<GoodItem> goods =
+                    LoadGoodsByGST(gstNo);
+
+                // =====================================================
+                // GENERATE HTML
+                // =====================================================
+
+                string htmlContent =
+                    db.GenerateVendorHtmlWithData(
+                        data,
+                        goods
+                    );
+
+                log.WriteToLogFile_Debug(
+                    "Vendor HTML generated",
+                    "Mail"
+                );
+
+                // =====================================================
+                // CONVERT HTML TO PDF
+                // =====================================================
+
+                byte[] pdfBytes =
+                    db.ConvertHtmlToPdf(htmlContent);
+
+                log.WriteToLogFile_Debug(
+                    "PDF generated",
+                    "Mail"
+                );
+
+                // =====================================================
+                // DETERMINE MAIL TYPE
+                // =====================================================
+
+                string templateType =
+                    !string.IsNullOrWhiteSpace(mailTemplate) &&
+                    mailTemplate.Trim().ToUpper() == "REJECT"
+                        ? "REJECT"
+                        : "SAP";
+
+                // =====================================================
+                // GET MAIL TEMPLATE
+                // =====================================================
+
+                DataTable mailTemplateTable =
+                    db.ExecuteQueryForDataTable(
+                        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT_1""('{templateType}')"
+                    );
+
+                string body = "";
+                string subject = "";
+                string ccMails = "";
+
+                if (mailTemplateTable != null &&
+                    mailTemplateTable.Rows.Count > 0)
+                {
+                    DataRow row =
+                        mailTemplateTable.Rows[0];
+
+                    body =
+                        row["Body"]?.ToString() ?? "";
+
+                    subject =
+                        row["Subject"]?.ToString() ?? "";
+
+                    if (mailTemplateTable.Columns.Contains("CCMail"))
+                    {
+                        ccMails =
+                            row["CCMail"]?.ToString() ?? "";
+                    }
+                }
+                else
+                {
+                    return (
+                        false,
+                        $"Mail template not found for {templateType}."
+                    );
+                }
+
+                // =====================================================
+                // REJECT / SAP BODY
+                // =====================================================
+
+                body = body.Replace(
+                    "{Vendor Name}",
+                    data["Trade Name"]?.ToString() ?? ""
+                );
+
+                if (templateType == "REJECT")
+                {
+                    // Old Web Forms:
+                    // body = body.Replace(
+                    //     "{Remarks}",
+                    //     Session["RejectRemarks"].ToString()
+                    // );
+
+                    body = body.Replace(
+                        "{Remarks}",
+                        _sessionManager.Get("RejectRemarks") ?? ""
+                    );
+                }
+                else
+                {
+                    // Old Web Forms:
+                    // body = body.Replace(
+                    //     "{Vendor Code}",
+                    //     data1["Code"].ToString()
+                    // );
+
+                    body = body.Replace(
+                        "{Vendor Code}",
+                        data["Code"]?.ToString() ?? ""
+                    );
+                }
+
+                // =====================================================
+                // SMTP SETTINGS
+                // =====================================================
+
+                string fromMail =
+                    _configuration["MailSettings:MAILID"] ?? "";
+
+                string username =
+                    _configuration["MailSettings:SMTPUSER"] ?? "";
+
+                string password =
+                    _configuration["MailSettings:SMTPPWD"] ?? "";
+
+                string server =
+                    _configuration["MailSettings:SMTPSERVER"] ?? "";
+
+                int port =
+                    int.TryParse(
+                        _configuration["MailSettings:SMTPPORT"],
+                        out int smtpPort
+                    )
+                        ? smtpPort
+                        : 25;
+
+                // =====================================================
+                // SEND MAIL
+                // =====================================================
+
+                using (MailMessage mail =
+                    new MailMessage())
+                {
+                    mail.From =
+                        new MailAddress(fromMail);
+
+                    // =================================================
+                    // LOG MAIL DETAILS
+                    // =================================================
+
+                    log.WriteToLogFile_Debug(
+                        "To Mail : " + toMail,
+                        "Mail"
+                    );
+
+                    log.WriteToLogFile_Debug(
+                        "Agent Mail : " + agentMail,
+                        "Mail"
+                    );
+
+                    log.WriteToLogFile_Debug(
+                        "CC Mail : " + ccMails,
+                        "Mail"
+                    );
+
+                    // =================================================
+                    // TO MAIL
+                    // =================================================
+
+                    if (!string.IsNullOrWhiteSpace(toMail))
+                    {
+                        mail.To.Add(
+                            toMail.Trim()
+                        );
+                    }
+
+                    // =================================================
+                    // AGENT MAIL
+                    // =================================================
+
+                    if (!string.IsNullOrWhiteSpace(agentMail))
+                    {
+                        mail.To.Add(
+                            agentMail.Trim()
+                        );
+                    }
+
+                    // =================================================
+                    // CC MAIL
+                    // =================================================
+
+                    if (!string.IsNullOrWhiteSpace(ccMails))
+                    {
+                        foreach (
+                            string cc in ccMails.Split(
+                                new[] { ',', ';' },
+                                StringSplitOptions.RemoveEmptyEntries
+                            )
+                        )
+                        {
+                            if (!string.IsNullOrWhiteSpace(cc))
+                            {
+                                mail.CC.Add(
+                                    cc.Trim()
+                                );
+                            }
+                        }
+                    }
+
+                    // =================================================
+                    // SUBJECT
+                    // =================================================
+
+                    mail.Subject = subject;
+
+                    // =================================================
+                    // BODY
+                    // =================================================
+
+                    mail.Body = body;
+
+                    mail.IsBodyHtml = true;
+
+                    // =================================================
+                    // PDF ATTACHMENT
+                    // =================================================
+
+                    using (MemoryStream ms =
+                        new MemoryStream(pdfBytes))
+                    {
+                        mail.Attachments.Add(
+                            new Attachment(
+                                ms,
+                                "VendorRegistrationForm.pdf",
+                                "application/pdf"
+                            )
+                        );
+
+                        // =============================================
+                        // SMTP
+                        // =============================================
+
+                        using (SmtpClient smtp =
+                            new SmtpClient(
+                                server,
+                                port
+                            ))
+                        {
+                            smtp.Credentials =
+                                new NetworkCredential(
+                                    username,
+                                    password
+                                );
+
+                            smtp.EnableSsl = true;
+
+                            log.WriteToLogFile_Debug(
+                                $"{templateType} Mail sending",
+                                "Mail"
+                            );
+
+                            await smtp.SendMailAsync(mail);
+
+                            log.WriteToLogFile_Debug(
+                                $"{templateType} Mail Ended",
+                                "Mail"
+                            );
+                        }
+                    }
+                }
+
+                // =====================================================
+                // SUCCESS
+                // =====================================================
+
+                if (templateType == "REJECT")
+                {
+                    return (
+                        true,
+                        "Reject mail sent successfully."
+                    );
+                }
+
+                return (
+                    true,
+                    "Mail sent successfully."
+                );
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    "Error while sending mail : " +
+                    ex.Message,
+                    "Mail"
+                );
+
+                return (
+                    false,
+                    "Error while sending mail: " +
+                    ex.Message
+                );
+            }
+        }
         private DataTable GetVendorDetails(string gstNo)
         {
             string query = $@"select * from ""{sDBName}"".""TEC_OLED"" where ""GstNo""='{gstNo}'";
-            //writeLog("GetVendorDetails Query : " + query, "Mail");
+            // log.WriteToLogFile_Debug("GetVendorDetails Query : " + query, "Mail");
             DataTable dt = ExecuteQueryForDataTable(query);
             return dt;
         }
@@ -1127,19 +1697,19 @@ string userName)
             }
             return $"<div class=\"items-section\" id=\"items_supplied\">{items}</div>";
         }
-
+       
         //protected void SentMail(string toMail, string selectedGST, string CardCode)
         //{
         //    string gstNo = selectedGST;
         //    string agentMail = string.Empty;
         //    var data1 = new Dictionary<string, object>();
         //    List<GoodItem> goods = new List<GoodItem>();
-        //   // writeLog("SentMail started", "Mail");
+        //   //  log.WriteToLogFile_Debug("SentMail started", "Mail");
         //    DataTable ds = GetVendorDetails(gstNo);
-        //    //writeLog("Getting data", "Mail");
+        //    // log.WriteToLogFile_Debug("Getting data", "Mail");
         //    if (ds.Rows.Count > 0)
         //    {
-        //        // writeLog("Getting Row Data", "Mail");
+        //        //  log.WriteToLogFile_Debug("Getting Row Data", "Mail");
         //        DataRow dr = ds.Rows[0];
 
         //        Dictionary<string, object> data = new Dictionary<string, object>();
@@ -1184,7 +1754,7 @@ string userName)
         //        string Id = GetSingleValue($@"select * from ""{sDBName}"".""TEC_OLED"" where ""GstNo""='{gstNo}'");
         //        DataTable dt = ExecuteQueryForDataTable($@"Select * from ""{sDBName}"".""PaymentDetails"" where ""Id""='{Id} '");
 
-        //       // writeLog("Getting Payment details", "Mail");
+        //       //  log.WriteToLogFile_Debug("Getting Payment details", "Mail");
         //        if (dt.Rows.Count > 0)
         //        {
         //            DataRow dr1 = dt.Rows[0];
@@ -1228,9 +1798,9 @@ string userName)
         //    }
         //    //var data1 = Session["PreviewData"] as Dictionary<string, object>;
         //    string htmlContent = GenerateVendorHtmlWithData(data1, goods);
-        //    writeLog("Getting HtmlContent", "Mail");
+        //     log.WriteToLogFile_Debug("Getting HtmlContent", "Mail");
         //    byte[] pdfBytes = ConvertHtmlToPdf(htmlContent);
-        //    writeLog("Getting pdf", "Mail");
+        //     log.WriteToLogFile_Debug("Getting pdf", "Mail");
         //    if (!string.IsNullOrEmpty(sRejectType) && sRejectType == "REJECT")
         //    {
         //        try
@@ -1244,7 +1814,7 @@ string userName)
         //                subject = row["Subject"].ToString();
         //                if (dt.Columns.Contains("CCMail")) ccMails = row["CCMail"].ToString();
         //            }
-        //            writeLog("REJECT Mail Started", "Mail");
+        //             log.WriteToLogFile_Debug("REJECT Mail Started", "Mail");
         //            using (MailMessage mail = new MailMessage())
         //            {
         //                string frommail = ConfigurationManager.AppSettings["MAILID"];
@@ -1254,9 +1824,9 @@ string userName)
         //                int port = Convert.ToInt32(ConfigurationManager.AppSettings["SMTPPORT"]);
 
         //                mail.From = new MailAddress(frommail);
-        //                writeLog("To Mail :" + toMail, "Mail");
-        //                writeLog("Agent Mail :" + agentMail, "Mail");
-        //                writeLog("CC Mail :" + ccMails, "Mail");
+        //                 log.WriteToLogFile_Debug("To Mail :" + toMail, "Mail");
+        //                 log.WriteToLogFile_Debug("Agent Mail :" + agentMail, "Mail");
+        //                 log.WriteToLogFile_Debug("CC Mail :" + ccMails, "Mail");
         //                if (!string.IsNullOrWhiteSpace(toMail))
         //                    mail.To.Add(toMail.Trim());
 
@@ -1284,9 +1854,9 @@ string userName)
         //                    {
         //                        smtp.Credentials = new System.Net.NetworkCredential(username, password);
         //                        smtp.EnableSsl = true;
-        //                        writeLog("Mail sending", "Mail");
+        //                         log.WriteToLogFile_Debug("Mail sending", "Mail");
         //                        smtp.Send(mail);
-        //                        writeLog("Mail Ended", "Mail");
+        //                         log.WriteToLogFile_Debug("Mail Ended", "Mail");
         //                    }
         //                }
         //            }
@@ -1295,7 +1865,7 @@ string userName)
         //        }
         //        catch (Exception ex)
         //        {
-        //            writeLog("Error while sending mail : " + ex.Message, "Mail");
+        //             log.WriteToLogFile_Debug("Error while sending mail : " + ex.Message, "Mail");
         //            ScriptManager.RegisterStartupScript(this, GetType(), "mailError", $"alert('Error sending mail: {ex.Message}');", true);
         //        }
         //    }
@@ -1312,7 +1882,7 @@ string userName)
         //                subject = row["Subject"].ToString();
         //                if (dt.Columns.Contains("CCMail")) ccMails = row["CCMail"].ToString();
         //            }
-        //            writeLog("SAP Mail Started", "Mail");
+        //             log.WriteToLogFile_Debug("SAP Mail Started", "Mail");
         //            using (MailMessage mail = new MailMessage())
         //            {
         //                string frommail = ConfigurationManager.AppSettings["MAILID"];
@@ -1322,9 +1892,9 @@ string userName)
         //                int port = Convert.ToInt32(ConfigurationManager.AppSettings["SMTPPORT"]);
 
         //                mail.From = new MailAddress(frommail);
-        //                writeLog("To Mail :" + toMail, "Mail");
-        //                writeLog("Agent Mail :" + agentMail, "Mail");
-        //                writeLog("CC Mail :" + ccMails, "Mail");
+        //                 log.WriteToLogFile_Debug("To Mail :" + toMail, "Mail");
+        //                 log.WriteToLogFile_Debug("Agent Mail :" + agentMail, "Mail");
+        //                 log.WriteToLogFile_Debug("CC Mail :" + ccMails, "Mail");
         //                mail.To.Add(toMail);
         //                mail.To.Add(agentMail);
         //                if (!string.IsNullOrWhiteSpace(ccMails))
@@ -1347,9 +1917,9 @@ string userName)
         //                    {
         //                        smtp.Credentials = new System.Net.NetworkCredential(username, password);
         //                        smtp.EnableSsl = true;
-        //                        writeLog("Mail sending", "Mail");
+        //                         log.WriteToLogFile_Debug("Mail sending", "Mail");
         //                        smtp.Send(mail);
-        //                        writeLog("Mail Ended", "Mail");
+        //                         log.WriteToLogFile_Debug("Mail Ended", "Mail");
         //                    }
         //                }
         //            }
@@ -1358,7 +1928,7 @@ string userName)
         //        }
         //        catch (Exception ex)
         //        {
-        //            writeLog("Error while sending mail : " + ex.Message, "Mail");
+        //             log.WriteToLogFile_Debug("Error while sending mail : " + ex.Message, "Mail");
         //            ScriptManager.RegisterStartupScript(this, GetType(), "mailError", $"alert('Error sending mail: {ex.Message}');", true);
         //        }
         //    }
@@ -2414,10 +2984,11 @@ string userName)
 
                 if (!string.IsNullOrEmpty(toMail))
                 {
-                
-               
-                    //SentMail(toMail, gstNo, "");
-                  
+                    mailTemplate = "REJECT";
+                    _sessionManager.Set("RejectRemarks", Reason);
+                    SentMail(toMail, GstNumber, "");
+                    mailTemplate = string.Empty;
+
                 }
 
 

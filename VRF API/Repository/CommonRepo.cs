@@ -485,8 +485,10 @@ namespace VRF_API.Repository
             public string MobileNumber { get; set; }
 
             public string OfficeTelephoneNo { get; set; }
-            public string DeclarationName { get; set; }
-            public string DeclarationDesignation { get; set; }
+            public string? DeclarationName { get; set; }
+            public string? DeclarationDesignation { get; set; }
+
+            public string? DeclarationMobileNumber { get; set; }
 
             public string TanNumber { get; set; }
 
@@ -584,7 +586,7 @@ namespace VRF_API.Repository
 
         public class MsmeDetailsModel
         {
-            public string MsmeNo { get; set; }
+            public string? MsmeNo { get; set; }
 
             public string MsmeRegistrationStatus { get; set; }
 
