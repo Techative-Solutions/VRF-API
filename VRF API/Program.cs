@@ -74,7 +74,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000/")
+        policy.WithOrigins("http://192.168.162.3:6068","http://localhost:3000")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -89,16 +89,34 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddDistributedMemoryCache();
 
+//builder.Services.AddSession(options =>
+//{
+//    //options.IdleTimeout = TimeSpan.FromMinutes(LogoffTime);
+//    options.Cookie.HttpOnly = true;
+//    options.Cookie.IsEssential = true;
+
+//    options.Cookie.SameSite = SameSiteMode.None;
+//    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
+//});
+
 builder.Services.AddSession(options =>
 {
-    //options.IdleTimeout = TimeSpan.FromMinutes(LogoffTime);
+    //options.Cookie.Name = "ROL.Session";
+
     options.Cookie.HttpOnly = true;
+
     options.Cookie.IsEssential = true;
 
-    options.Cookie.SameSite = SameSiteMode.None;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    // Current HTTP deployment
+    options.Cookie.SameSite =
+        SameSiteMode.Lax;
 
+    options.Cookie.SecurePolicy =
+        CookieSecurePolicy.None;
 });
+
+
 //builder.Services.AddScoped<SapConnection>();
 
 // ⭐ Register OdbcConnection dependency
