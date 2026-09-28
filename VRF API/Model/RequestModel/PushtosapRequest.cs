@@ -37,4 +37,17 @@
 
 
     }
+    public class DraftReq
+    {
+        public string Draft { get; set; }
+
+        public string GstNumber { get; set; }
+        public string UserName { get; set; }
+
+     
+
+
+
+
+    }
 }

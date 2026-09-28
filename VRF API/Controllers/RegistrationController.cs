@@ -77,9 +77,23 @@ namespace VRF_API.Controllers
 
             return Ok(response);
         }
+        [HttpPost]
+        [Route("Draft")]
+        public async Task<ActionResult> DraftApproved(DraftReq request)
+        {
+            var response = await _rejistrationForm.DraftApproved(
+                request.Draft,
+                   request.GstNumber,
+                      request.UserName
+
+                );
+
+            return Ok(response);
+        }
+
+      
 
 
-       
 
 
     }
