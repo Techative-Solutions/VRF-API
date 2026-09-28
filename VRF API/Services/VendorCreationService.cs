@@ -270,62 +270,177 @@ namespace VRF_API.Services
         }
         public async Task<SubmitVendorResult> SubmitVendor(SubmitVendorRequest request)
         {
+            const string functionName = "SubmitVendor";
             log.WriteToLogFile_Debug(
                 "[VendorCreation] [SubmitVendor] [START] - Submit vendor started",
                 "SubmitVendor");
 
             if (request == null)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Submit request is null.",
+                    functionName
+                );
+
                 throw new Exception("Invalid submit request.");
+            }
 
             if (request.FormData == null)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Vendor form data is missing.",
+                    functionName
+                );
+
                 throw new Exception("Vendor form data is required.");
+            }
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [REQUEST] - Request type: " +
+                $"ExistingVendor: {request.IsExistingVendor} | " +
+                $"OtpValid: {request.OtpValid}",
+                functionName
+            );
+
 
             //if (request.IsExistingVendor && !request.OtpValid)
             //    throw new Exception("Kindly Verify Mobile Number.");
+
 
             var model = request.FormData;
 
             string gstNumber = model.GstNumber?.Trim().ToUpper() ?? "";
             string email = model.Email?.Trim() ?? "";
 
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [REQUEST] - Vendor submission details received. " +
+                $"GST: {gstNumber} | " +
+                $"TradeName: {model.TradeName} | " +
+                $"Email: {email} | " +
+                $"Mobile: {model.MobileNumber}",
+                functionName
+            );
+
             if (string.IsNullOrWhiteSpace(gstNumber))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - GST Number is required.",
+                    functionName
+                );
+
                 throw new Exception("GST Number is required.");
+            }
 
             if (gstNumber.Length != 15)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - GST Number length is invalid.",
+                    functionName
+                );
+
                 throw new Exception("GSTNO must be 15 character.");
+            }
 
             if (string.IsNullOrWhiteSpace(model.TradeName))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Trade Name is required.",
+                    functionName
+                );
+
                 throw new Exception("Trade Name is required.");
+            }
 
             if (string.IsNullOrWhiteSpace(email))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Email is required.",
+                    functionName
+                );
+
                 throw new Exception("Email is required.");
+            }
 
             if (string.IsNullOrWhiteSpace(model.MobileNumber))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Mobile Number is required.",
+                    functionName
+                );
+
                 throw new Exception("Mobile Number is required.");
+            }
+
 
             if (model.RegisteredOffice == null ||
-                string.IsNullOrWhiteSpace(model.RegisteredOffice.Address1) ||
-                string.IsNullOrWhiteSpace(model.RegisteredOffice.Country))
+            string.IsNullOrWhiteSpace(model.RegisteredOffice.Address1) ||
+            string.IsNullOrWhiteSpace(model.RegisteredOffice.Country))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Registered Office Address or Country is missing.",
+                    functionName
+                );
+
                 throw new Exception("Registered Office Address and Country are required.");
+            }
 
             if (model.BillingAddress == null ||
                 string.IsNullOrWhiteSpace(model.BillingAddress.Address1) ||
                 string.IsNullOrWhiteSpace(model.BillingAddress.Country))
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Billing Address or Country is missing.",
+                    functionName
+                );
+
                 throw new Exception("Billing Address and Country are required.");
+            }
 
             if (model.BankDetails == null ||
                 
                 string.IsNullOrWhiteSpace(model.BankDetails.AccountNameHolder) ||
                 string.IsNullOrWhiteSpace(model.BankDetails.AccountNumber) ||
                 string.IsNullOrWhiteSpace(model.BankDetails.IfscCode))
-                throw new Exception("Bank Name, Account Name, Account Number and IFSC Code are required.");
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION_FAILED] - Required bank details are missing.",
+                    functionName
+                );
 
+                throw new Exception(
+                    "Bank Name, Account Name, Account Number and IFSC Code are required."
+                );
+            }
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [VALIDATION] - Vendor request validation completed successfully.",
+                functionName
+            );
+
+            log.WriteToLogFile_Debug(
+         $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+         functionName
+     );
             using var connection = new OdbcConnection(connectionString);
             await connection.OpenAsync();
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+                functionName
+            );
             using var transaction = connection.BeginTransaction();
+            log.WriteToLogFile_Debug(
+           $"[{functionName}] [TRANSACTION] - Database transaction started.",
+           functionName
+       );
 
             try
             {
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Checking whether GST is already registered in a non-draft record.",
+         functionName
+     );
+
                 int existingId = 0;
 
                 // A submitted vendor is a duplicate only when a NON-DRAFT
@@ -343,10 +458,21 @@ namespace VRF_API.Services
                     var result = await command.ExecuteScalarAsync();
 
                     if (result != null && result != DBNull.Value)
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [VALIDATION_FAILED] - GST Number is already registered in a final submission.",
+                            functionName
+                        );
+
                         throw new Exception("GSTNumber is already registered.");
+                    }
                 }
 
-                // Check whether this GST belongs to an existing draft.
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Checking whether an existing draft is available.",
+          functionName
+      );
+
                 string existingDraftQuery = $@"
                     SELECT ""Id""
                     FROM ""{sDBName}"".""TEC_OLED""
@@ -360,13 +486,33 @@ namespace VRF_API.Services
                     var result = await command.ExecuteScalarAsync();
 
                     if (result != null && result != DBNull.Value)
+                    {
                         existingId = Convert.ToInt32(result);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - Existing draft found. " +
+                            $"DraftId: {existingId}",
+                            functionName
+                        );
+                    }
+                    else
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - No existing draft found.",
+                            functionName
+                        );
+                    }
                 }
 
                 int id = existingId;
 
                 if (id == 0)
                 {
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [DATABASE] - No existing draft found. Generating new vendor ID.",
+                functionName
+            );
+
                     string nextIdQuery = $@"
                         SELECT IFNULL(MAX(""Id""), 0) + 1
                         FROM ""{sDBName}"".""TEC_OLED""";
@@ -377,6 +523,11 @@ namespace VRF_API.Services
                         transaction);
 
                     id = Convert.ToInt32(await idCommand.ExecuteScalarAsync());
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [DATABASE] - New vendor ID generated. " +
+              $"Id: {id}",
+              functionName
+          );
                 }
 
                 // IMPORTANT:
@@ -386,31 +537,79 @@ namespace VRF_API.Services
                 // removed first and then the complete final data is inserted.
                 if (existingId > 0)
                 {
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [DATABASE] - Removing existing draft child data. " +
+              $"Id: {existingId}",
+              functionName
+          );
                     await DeleteSubmissionChildData(
                         connection,
                         transaction,
                         existingId);
+                    log.WriteToLogFile_Debug(
+    $"[{functionName}] [DATABASE] - Existing draft child data removed successfully. " +
+    $"Id: {existingId}",
+    functionName
+);
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - Updating existing vendor header details. " +
+                        $"Id: {existingId}",
+                        functionName
+                    );
+
 
                     await SubmitUpdateHeaderDetails(
                         connection,
                         transaction,
                         existingId,
                         model);
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [DATABASE] - Existing vendor header updated successfully. " +
+              $"Id: {existingId}",
+              functionName
+          );
                 }
                 else
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [DATABASE] - Inserting new vendor header details. " +
+               $"Id: {id}",
+               functionName
+           );
                     await SubmitInsertHeaderDetails(
                         connection,
                         transaction,
                         id,
                         model);
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - Vendor header inserted successfully. " +
+                        $"Id: {id}",
+                        functionName
+                    );
                 }
 
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Saving payment details. " +
+                    $"Id: {id}",
+                    functionName
+                );
                 await SubmitInsertPaymentDetails(
                     connection,
                     transaction,
                     id,
                     model.PaymentDetails);
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Payment details saved successfully.",
+          functionName
+      );
+
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Saving other business locations. " +
+         $"Id: {id} | Count: {model.OtherBusinessLocations?.Count ?? 0}",
+         functionName
+     );
 
                 await SubmitInsertBusinessDetails(
                     connection,
@@ -419,35 +618,59 @@ namespace VRF_API.Services
                     model.OtherBusinessLocations);
 
                 // React: formData.businessPartners -> TEC_LED2
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Saving business partner details. " +
+         $"Id: {id} | Count: {model.BusinessPartners?.Count ?? 0}",
+         functionName
+     );
                 await SubmitInsertPartnerDetails(
                     connection,
                     transaction,
                     id,
                     model.BusinessPartners);
-
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Saving operational contacts. " +
+           $"Id: {id} | Count: {model.OperationalContacts?.Count ?? 0}",
+           functionName
+       );
                 await SubmitInsertOperationalContacts(
                     connection,
                     transaction,
                     id,
                     model.OperationalContacts);
-
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [DATABASE] - Saving major goods/services. " +
+        $"Id: {id} | Count: {model.MajorGoodsServices?.Count ?? 0}",
+        functionName
+    );
                 await SubmitInsertMajorGoodsServices(
                     connection,
                     transaction,
                     id,
                     model.MajorGoodsServices);
+                log.WriteToLogFile_Debug(
+       $"[{functionName}] [DATABASE] - Saving major customers. " +
+       $"Id: {id} | Count: {model.MajorCustomers?.Count ?? 0}",
+       functionName
+   );
 
                 await SubmitInsertMajorCustomers(
                     connection,
                     transaction,
                     id,
                     model.MajorCustomers);
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Saving other information. " +
+           $"Id: {id}",
+           functionName
+       );
 
                 await SubmitInsertOtherInformation(
                     connection,
                     transaction,
                     id,
                     model.OtherInformation);
+               
 
                 await SubmitInsertDocuments(
                     connection,
@@ -455,6 +678,10 @@ namespace VRF_API.Services
                     id,
                     model,
                     request.UploadedFiles);
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Vendor documents saved successfully.",
+          functionName
+      );
 
                 transaction.Commit();
 
@@ -464,13 +691,30 @@ namespace VRF_API.Services
 
                 try
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [MAIL] - Preparing vendor submission email. " +
+               $"Id: {id} | Recipient: {email}",
+               functionName
+           );
+
                     await SentMail(request.FormData,email, request.FormData.PaymentDetails.AgencyEmail);
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [MAIL] - Vendor submission email sent successfully. " +
+                        $"Id: {id}",
+                        functionName
+                    );
                 }
                 catch (Exception mailEx)
                 {
                     log.WriteToLogFile_Debug(
-                        "[VendorCreation] [SubmitVendor] [MAIL_ERROR] - " + mailEx.Message,
-                        "SubmitVendor");
+                $"[{functionName}] [MAIL_ERROR] - Vendor submission committed, " +
+                $"but email sending failed. " +
+                $"Id: {id} | " +
+                $"Message: {mailEx.Message} | " +
+                $"StackTrace: {mailEx.StackTrace}",
+                functionName
+            );
                 }
 
                 return new SubmitVendorResult
@@ -483,20 +727,53 @@ namespace VRF_API.Services
             }
             catch (Exception ex)
             {
-                try
+                // ---------------------------
+                // ROLLBACK
+                // ---------------------------
+
+                if (transaction != null)
                 {
-                    transaction.Rollback();
-                }
-                catch
-                {
-                    // Ignore rollback errors.
+                    try
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [TRANSACTION] - Rolling back vendor submission transaction.",
+                            functionName
+                        );
+
+                        transaction.Rollback();
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [TRANSACTION] - Transaction rolled back successfully.",
+                            functionName
+                        );
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [ROLLBACK_ERROR] - Error while rolling back transaction. " +
+                            $"Message: {rollbackEx.Message}",
+                            functionName
+                        );
+                    }
                 }
 
                 log.WriteToLogFile_Debug(
-                    "[VendorCreation] [SubmitVendor] [ERROR] - " + ex.Message,
-                    "SubmitVendor");
+                    $"[{functionName}] [EXCEPTION] - Error while submitting vendor. " +
+                    $"GST: {request?.FormData?.GstNumber} | " +
+                    $"Email: {request?.FormData?.Email} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
                 throw;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Submit vendor process ended.",
+                    functionName
+                );
             }
         }
 
@@ -505,26 +782,48 @@ namespace VRF_API.Services
     string toMail,
     string agentMail)
         {
+            const string functionName = "SentMail";
+            const string mailTemplate = "DRAFT";
+            const string spName = "Mail_BOSY&SUBJECT_1";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor submission mail process started.",
+                functionName
+            );
+
             try
             {
-                // ============================================================
-                // 1. VALIDATE FORM DATA
-                // ============================================================
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [REQUEST] - Mail request received. " +
+            $"ToMail: {toMail} | " +
+            $"AgentMail: {agentMail}",
+            functionName
+        );
                 if (formData == null)
                 {
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [VALIDATION_FAILED] - Form data is missing.",
+                functionName
+            );
+
                     throw new Exception("Form data is missing.");
                 }
 
+
                 log.WriteToLogFile_Debug(
-                    "Build Preview started",
-                    "Mail"
+                    $"[{functionName}] [VALIDATION] - Form data validation completed successfully. " +
+                    $"TradeName: {formData.TradeName} | " +
+                    $"GST: {formData.GstNumber}",
+                    functionName
                 );
 
                 // ============================================================
                 // 2. BUILD PREVIEW DATA FROM FORM DATA
                 // ============================================================
-
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [PREVIEW] - Building vendor preview data.",
+         functionName
+     );
                 var data = new Dictionary<string, object>();
 
                 data["Trade Name"] =
@@ -602,10 +901,12 @@ namespace VRF_API.Services
                 data["Date"] =
                     DateTime.Now.ToString("dd/MM/yyyy");
 
+
                 log.WriteToLogFile_Debug(
-                    "Build Preview Ended",
-                    "Mail"
+                    $"[{functionName}] [PREVIEW] - Vendor preview data built successfully.",
+                    functionName
                 );
+
 
                 // ============================================================
                 // 3. GET MAJOR GOODS FROM FORMDATA
@@ -616,29 +917,37 @@ namespace VRF_API.Services
                     ?? new List<MajorGoodsServiceModel>();
 
                 log.WriteToLogFile_Debug(
-                    "Major goods collected: " +
-                    goodsList.Count,
-                    "Mail"
+       $"[{functionName}] [DATA] - Major goods/services collected. " +
+       $"Total records: {goodsList.Count}",
+       functionName
+   );
+
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [HTML] - Generating vendor preview HTML.",
+                    functionName
                 );
 
-                // ============================================================
-                // 4. GENERATE PREVIEW HTML
-                // ============================================================
 
                 string htmlContent =
                     db.GenerateVendorHtmlWithData(
                         data,
                         goodsList
                     );
-
                 log.WriteToLogFile_Debug(
-                    "Html content completed",
-                    "Mail"
-                );
+                           $"[{functionName}] [HTML] - Vendor preview HTML generated successfully. " +
+                           $"ContentLength: {htmlContent?.Length ?? 0}",
+                           functionName
+                       );
 
                 // ============================================================
                 // 5. CONVERT HTML TO PDF
                 // ============================================================
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [PDF] - Converting vendor HTML to PDF.",
+                    functionName
+                );
 
                 byte[] pdfBytes =
                     db.ConvertHtmlToPdf(htmlContent);
@@ -646,6 +955,11 @@ namespace VRF_API.Services
                 if (pdfBytes == null ||
                     pdfBytes.Length == 0)
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [PDF_FAILED] - Vendor preview PDF generation failed.",
+               functionName
+           );
+
                     throw new Exception(
                         "Failed to generate Vendor Preview PDF."
                     );
@@ -663,16 +977,35 @@ namespace VRF_API.Services
                 string body = "";
                 string subject = "";
                 string ccMails = "";
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Fetching mail template. " +
+           $"Template: {mailTemplate} | SPName: {spName}",
+           functionName
+       );
 
                 using (var connection = new OdbcConnection(connectionString))
                 {
+                    log.WriteToLogFile_Debug(
+             $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+             functionName
+         );
+
                     await connection.OpenAsync();
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+              functionName
+          );
 
                     string query =
                         $"CALL \"{sDBName}\".\"Mail_BOSY&SUBJECT_1\"('DRAFT')";
 
                     using (var command = new OdbcCommand(query, connection))
                     {
+                        log.WriteToLogFile_Debug(
+                   $"[{functionName}] [DATABASE] - Executing mail template stored procedure. " +
+                   $"SPName: {spName}",
+                   functionName
+               );
                         using (var reader = await command.ExecuteReaderAsync())
                         {
                             if (await reader.ReadAsync())
@@ -707,12 +1040,22 @@ namespace VRF_API.Services
                                 catch (IndexOutOfRangeException)
                                 {
                                     ccMails = "";
+                                    log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - CCMail column was not returned by the mail template.",
+                            functionName
+                        );
                                 }
                             }
                         }
                     }
                 }
-
+                log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - Mail template retrieved successfully. " +
+                        $"SubjectLength: {subject.Length} | " +
+                        $"BodyLength: {body.Length} | " +
+                        $"CCConfigured: {!string.IsNullOrWhiteSpace(ccMails)}",
+                        functionName
+                    );
                 // ============================================================
                 // 7. REPLACE VENDOR NAME IN MAIL BODY
                 // ============================================================
@@ -725,7 +1068,10 @@ namespace VRF_API.Services
                         "{Vendor Name}",
                         vendorName
                     );
-
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [MAIL] - Vendor name placeholder replaced in mail body.",
+         functionName
+     );
                 // ============================================================
                 // 8. GET SMTP SETTINGS
                 // ============================================================
@@ -746,11 +1092,12 @@ namespace VRF_API.Services
                     Convert.ToInt32(
                         _configuration["Mail:SMTPPORT"]
                     );
-
                 log.WriteToLogFile_Debug(
-                    "Mail settings loaded",
-                    "Mail"
-                );
+                         $"[{functionName}] [SMTP] - SMTP settings loaded successfully. " +
+                         $"Server: {server} | Port: {port} | SSL: Enabled",
+                         functionName
+                     );
+
 
                 // ============================================================
                 // 9. CREATE MAIL
@@ -770,6 +1117,10 @@ namespace VRF_API.Services
                         mail.To.Add(
                             toMail.Trim()
                         );
+                        log.WriteToLogFile_Debug(
+                  $"[{functionName}] [MAIL] - Primary recipient added.",
+                  functionName
+              );
                     }
 
                     // ========================================================
@@ -781,12 +1132,16 @@ namespace VRF_API.Services
                         mail.To.Add(
                             agentMail.Trim()
                         );
+                        log.WriteToLogFile_Debug(
+                 $"[{functionName}] [MAIL] - Agent recipient added.",
+                 functionName
+             );
                     }
 
                     // ========================================================
                     // CC MAILS
                     // ========================================================
-
+                    int ccCount = 0;
                     if (!string.IsNullOrWhiteSpace(ccMails))
                     {
                         foreach (
@@ -801,10 +1156,16 @@ namespace VRF_API.Services
                                 mail.CC.Add(
                                     cc.Trim()
                                 );
+                                ccCount++;
                             }
                         }
                     }
-
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [MAIL] - Mail recipients configured. " +
+              $"ToCount: {mail.To.Count} | " +
+              $"CCCount: {ccCount}",
+              functionName
+          );
                     // ========================================================
                     // SUBJECT
                     // ========================================================
@@ -815,9 +1176,19 @@ namespace VRF_API.Services
                     // BODY
                     // ========================================================
 
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [MAIL] - Mail subject configured successfully.",
+                        functionName
+                    );
+
                     mail.Body = body;
 
                     mail.IsBodyHtml = true;
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [MAIL] - HTML mail body configured successfully.",
+                        functionName
+                    );
 
                     // ========================================================
                     // 10. ATTACH GENERATED PREVIEW PDF
@@ -841,7 +1212,11 @@ namespace VRF_API.Services
                             "Vendor Preview PDF attached",
                             "Mail"
                         );
-
+                        log.WriteToLogFile_Debug(
+                 $"[{functionName}] [ATTACHMENT] - Vendor Preview PDF attached successfully. " +
+                 $"FileSize: {pdfBytes.Length} bytes",
+                 functionName
+             );
                         // ====================================================
                         // 11. SEND EMAIL
                         // ====================================================
@@ -860,17 +1235,17 @@ namespace VRF_API.Services
 
                             smtp.EnableSsl = true;
 
-                            log.WriteToLogFile_Debug(
-                                "Mail sending started",
-                                "Mail"
-                            );
 
+                            log.WriteToLogFile_Debug(
+                                $"[{functionName}] [SMTP] - Mail sending started.",
+                                functionName
+                            );
                             await smtp.SendMailAsync(mail);
 
                             log.WriteToLogFile_Debug(
-                                "Mail Sent completed",
-                                "Mail"
-                            );
+                       $"[{functionName}] [SUCCESS] - Vendor submission mail sent successfully.",
+                       functionName
+                   );
                         }
                     }
                 }
@@ -878,20 +1253,28 @@ namespace VRF_API.Services
             catch (Exception ex)
             {
                 log.WriteToLogFile_Debug(
-                    "Error while sending mail : " +
-                    ex.Message +
-                    " | StackTrace: " +
-                    ex.StackTrace,
-                    "Mail"
-                );
-
+           $"[{functionName}] [EXCEPTION] - Error while sending vendor submission mail. " +
+           $"ToMail: {toMail} | " +
+           $"AgentMail: {agentMail} | " +
+           $"Message: {ex.Message} | " +
+           $"StackTrace: {ex.StackTrace}",
+           functionName
+       );
                 throw;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Vendor submission mail process ended.",
+                    functionName
+                );
             }
         }
        
 
         private static string GenerateOTP()
         {
+
             try
             {
                 string numbers = "123456789";
@@ -1015,6 +1398,7 @@ namespace VRF_API.Services
 
             try
             {
+                log.WriteToLogFile_Debug($"Values - {mobileNumber}, OTP - {otp}, templateID - {templateId}, apiKey - {apiKey}, clientId- {clientId}, ","RedeemOTP");
                 string baseUrl =
                     _configuration["OTP:RedeemOTPUrl"] ?? "";
 
@@ -1140,6 +1524,8 @@ namespace VRF_API.Services
 
                 string otp =
                     request.Otp?.Trim() ?? "";
+
+                log.WriteToLogFile_Debug("", "VerifyOTP");
 
                 // ----------------------------------------------------
                 // Validation

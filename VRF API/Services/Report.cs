@@ -18,6 +18,7 @@ namespace VRF_API.Services
     }
     public class Report: IReport
     {
+        private readonly Repository.Log log;
         private readonly IConfiguration _configuration;
         private readonly OdbcConnection _connection;
         private readonly string sDBName;
@@ -37,24 +38,45 @@ namespace VRF_API.Services
         public async Task<List<Reports>> ReportName()
         {
             const string functionName = "ReportName";
-            //   Log.Information("Starting function {FunctionName}", functionName);
+              log.WriteToLogFile_Debug("Starting function {FunctionName}", functionName);
             const string spName = "SP_GetReportTypes";
             string query = @$"CALL ""{sDBName}"".""{spName}"" ()";
 
-            // Log.Debug("SQL Query for {FunctionName}: {Query}", functionName, query);
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Report name retrieval started.",
+                functionName
+            );
+
 
             List<Reports> RejDetailsList = new();
 
             try
             {
                 using var connection = new OdbcConnection(sConstr);
-                // Log.Debug("Opening ODBC connection...");
+                log.WriteToLogFile_Debug(
+               $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+               functionName
+           );
+
                 connection.Open();
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+           functionName
+       );
 
                 using var cmd = new OdbcCommand(query, connection);
-             
-                // Log.Debug("Executing SQL query...");
+
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Executing stored procedure. " +
+          $"SPName: {spName}",
+          functionName
+      );
                 using var reader = await cmd.ExecuteReaderAsync();
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+          functionName
+      );
 
                 while (await reader.ReadAsync())
                 {
@@ -68,37 +90,84 @@ namespace VRF_API.Services
                     RejDetailsList.Add(detail);
                 }
 
-                //Log.Information(
-                //    "{FunctionName} executed successfully. Total records loaded: {Count}",
-                //    functionName, cusDetailsList.Count
-                //);
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SUCCESS] - Report names retrieved successfully. " +
+           $"Total records: {RejDetailsList.Count}",
+           functionName
+       );
+
 
                 return RejDetailsList;
             }
             catch (Exception ex)
             {
-                // Log.Error(ex, "Error in {FunctionName}. Message: {Message}", functionName, ex.Message);
+                log.WriteToLogFile_Debug(
+               $"[{functionName}] [EXCEPTION] - Error while retrieving report names. " +
+               $"SPName: {spName} | " +
+               $"Message: {ex.Message} | " +
+               $"StackTrace: {ex.StackTrace}",
+               functionName
+           );
                 return new List<Reports>();
             }
             finally
             {
-                // Log.Information("Ending function {FunctionName}", functionName);
+                log.WriteToLogFile_Debug(
+             $"[{functionName}] [END] - Report name retrieval ended. " +
+             $"Total records: {RejDetailsList.Count}",
+             functionName
+         );
             }
         }
 
         public async Task<List<Dictionary<string, object>>> GetReportAsync(ReportRequest request)
         {
+            const string functionName = "GetReportAsync";
+            const string spName = "SP_GetReportData";
+
             var result = new List<Dictionary<string, object>>();
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Report data retrieval started.",
+                functionName
+            );
+
+
 
             try
             {
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [REQUEST] - Report request received. " +
+          $"UserName: {request?.UserName} | " +
+          $"ReportName: {request?.ReportName} | " +
+          $"FromDate: {request?.FromDate} | " +
+          $"ToDate: {request?.ToDate}",
+          functionName
+      );
+
                 using (OdbcConnection conn = new OdbcConnection(sConstr))
                 {
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+                        functionName
+                    );
                     await conn.OpenAsync();
 
-                    // Build fully qualified procedure name
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+              functionName
+          );
+
                     string procedureCall =
-                        $"CALL \"{sDBName}\".\"SP_GetReportData\"(?, ?, ?, ?)";
+             $@"CALL ""{sDBName}"".""{spName}"" (?, ?, ?, ?)";
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - Preparing stored procedure. " +
+                        $"SPName: {spName}",
+                        functionName
+                    );
+
 
                     using (OdbcCommand cmd = new OdbcCommand(procedureCall, conn))
                     {
@@ -107,11 +176,15 @@ namespace VRF_API.Services
                         cmd.Parameters.Add("ReportType", OdbcType.VarChar).Value = request.ReportName;
                         cmd.Parameters.Add("FromDate", OdbcType.VarChar).Value = request.FromDate;
                         cmd.Parameters.Add("ToDate", OdbcType.VarChar).Value = request.ToDate;
-                       
 
-          
+
+
                         using (OdbcDataReader reader = cmd.ExecuteReader())
                         {
+                            log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+           functionName
+       );
                             while (reader.Read())
                             {
                                 var row = new Dictionary<string, object>();
@@ -129,16 +202,39 @@ namespace VRF_API.Services
                         }
                     }
                 }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Report data retrieved successfully. " +
+                    $"Total records: {result.Count}",
+                    functionName
+                );
+
+                return result;
             }
             catch (Exception ex)
             {
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [EXCEPTION] - Error while retrieving report data. " +
+         $"SPName: {spName} | " +
+         $"Message: {ex.Message} | " +
+         $"StackTrace: {ex.StackTrace}",
+         functionName
+     );
+
                 throw new Exception("Error while fetching report data from HANA.", ex);
             }
 
-            return result;
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Report data retrieval ended. " +
+                    $"Total records: {result.Count}",
+                    functionName
+                );
+            }
         }
 
 
-      
-    }
+
+        }
 }

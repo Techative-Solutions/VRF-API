@@ -33,11 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Sap.Data.Hana.v3.5">
-      <HintPath>..\..\..\POS_TEST - 17-12-2024\bin\Sap.Data.Hana.v3.5.dll</HintPath>
-    </Reference>
     <Reference Include="Sap.Data.Hana.v4.5">
-      <HintPath>T:\NHFS\sap\Sap.Data.Hana.v4.5.dll</HintPath>
+      <HintPath>C:\Program Files\sap\hdbclient\ado.net\v4.5\Sap.Data.Hana.v4.5.dll</HintPath>
     </Reference>
   </ItemGroup>
 	<ItemGroup>

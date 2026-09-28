@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using Serilog;
+using System.Data;
 using System.Data.Odbc;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -22,7 +23,7 @@ namespace VRF_API.Services
         private readonly string _anotherDbName;
         private readonly DbConnection db;
         private readonly string sConstr;
-
+        private readonly Repository.Log log;
         public RejectionForm(IConfiguration configuration, OdbcConnection connection, DbConnection _db)
         {
             _configuration = configuration;
@@ -35,26 +36,57 @@ namespace VRF_API.Services
         public async Task<List<RejectedResponse>> RejectedDetails(string UserNme)
         {
             const string functionName = "RejectedDetails";
-            //   Log.Information("Starting function {FunctionName}", functionName);
             const string spName = "TEC_GetEdit_RejectedDetails";
+            log.WriteToLogFile_Debug(
+        $"[{functionName}] [START] - Rejected details retrieval started.",
+        functionName
+    );
+            log.WriteToLogFile_Debug(
+           $"[{functionName}] [REQUEST] - Rejected details request received. " +
+           $"UserName: {UserNme}",
+           functionName
+       );
+
             string query = @$"CALL ""{sDBName}"".""{spName}"" (?)";
 
-            // Log.Debug("SQL Query for {FunctionName}: {Query}", functionName, query);
+
 
             List<RejectedResponse> RejDetailsList = new();
 
             try
             {
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Preparing stored procedure. " +
+          $"SPName: {spName}",
+          functionName
+      );
+
                 using var connection = new OdbcConnection(sConstr);
-                // Log.Debug("Opening ODBC connection...");
+                log.WriteToLogFile_Debug(
+               $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+               functionName
+           );
+
                 connection.Open();
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+          functionName
+      );
 
                 using var cmd = new OdbcCommand(query, connection);
                 cmd.Parameters.AddWithValue("@UserName", UserNme);
 
+                log.WriteToLogFile_Debug(
+                           $"[{functionName}] [DATABASE] - Executing stored procedure. " +
+                           $"SPName: {spName}",
+                           functionName
+                       );
 
-                // Log.Debug("Executing SQL query...");
                 using var reader = await cmd.ExecuteReaderAsync();
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+           functionName
+       );
 
                 while (await reader.ReadAsync())
                 {
@@ -78,21 +110,33 @@ namespace VRF_API.Services
                     RejDetailsList.Add(detail);
                 }
 
-                //Log.Information(
-                //    "{FunctionName} executed successfully. Total records loaded: {Count}",
-                //    functionName, cusDetailsList.Count
-                //);
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [SUCCESS] - Rejected details retrieved successfully. " +
+          $"Total records: {RejDetailsList.Count}",
+          functionName
+      );
                 return RejDetailsList;
             }
             catch (Exception ex)
             {
-                // Log.Error(ex, "Error in {FunctionName}. Message: {Message}", functionName, ex.Message);
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [EXCEPTION] - Error while retrieving rejected details. " +
+            $"UserName: {UserNme} | " +
+            $"SPName: {spName} | " +
+            $"Message: {ex.Message} | " +
+            $"StackTrace: {ex.StackTrace}",
+            functionName
+        );
+
                 return new List<RejectedResponse>();
             }
             finally
             {
-                // Log.Information("Ending function {FunctionName}", functionName);
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [END] - Rejected details retrieval ended. " +
+           $"Total records: {RejDetailsList.Count}",
+           functionName
+       );
             }
         }
 

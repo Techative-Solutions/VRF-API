@@ -54,6 +54,10 @@ namespace VRF_API.Services
            string UserName,
            string Status
            );
+        Task<bool> DraftApproved(
+     string Draft,
+     string GstNumber,
+     string UserName);
     }
 
 
@@ -85,25 +89,54 @@ namespace VRF_API.Services
         public async Task<List<GroupCode>> GroupCode(string UserName)
         {
             const string functionName = "GroupCode";
-            //   Log.Information("Starting function {FunctionName}", functionName);
+            log.WriteToLogFile_Debug(
+              $"[{functionName}] [START] - GroupCode process started.",
+              functionName
+          );
+
             const string spName = "TEC_VRF_GETBPGROUPLIST";
+            log.WriteToLogFile_Debug(
+            $"[{functionName}] [REQUEST] - UserName received: {UserName}",
+            functionName
+        );
+
             string query = @$"CALL ""{sDBName}"".""{spName}"" (?)";
 
-            // Log.Debug("SQL Query for {FunctionName}: {Query}", functionName, query);
+            log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+           functionName
+       );
+
 
             List<GroupCode> RejDetailsList = new();
-
+            log.WriteToLogFile_Debug(
+         $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+         functionName
+     );
             try
             {
                 using var connection = new OdbcConnection(sConstr);
-                // Log.Debug("Opening ODBC connection...");
+       
                 connection.Open();
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+           functionName
+       );
+
 
                 using var cmd = new OdbcCommand(query, connection);
                 cmd.Parameters.AddWithValue("@UserName", UserName);
-                // Log.Debug("Executing SQL query...");
-                using var reader = await cmd.ExecuteReaderAsync();
+                log.WriteToLogFile_Debug(
+             $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+             functionName
+         );
 
+                using var reader = await cmd.ExecuteReaderAsync();
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+          functionName
+      );
+                int recordCount = 0;
                 while (await reader.ReadAsync())
                 {
                     var detail = new GroupCode
@@ -112,73 +145,240 @@ namespace VRF_API.Services
                         Name = reader["Name"] == DBNull.Value ? null : reader["Name"].ToString(),
 
 
-
+                      
                     };
 
                     RejDetailsList.Add(detail);
+                    recordCount++;
                 }
 
-                //Log.Information(
-                //    "{FunctionName} executed successfully. Total records loaded: {Count}",
-                //    functionName, cusDetailsList.Count
-                //);
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [SUCCESS] - GroupCode data retrieved successfully. " +
+            $"Total records loaded: {recordCount}",
+            functionName
+        );
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - GroupCode process completed successfully.",
+                    functionName
+                );
+
 
                 return RejDetailsList;
             }
             catch (Exception ex)
             {
-                // Log.Error(ex, "Error in {FunctionName}. Message: {Message}", functionName, ex.Message);
+                log.WriteToLogFile_Debug(
+               $"[{functionName}] [EXCEPTION] - Error while retrieving GroupCode data. " +
+               $"UserName: {UserName} | " +
+               $"Message: {ex.Message} | " +
+               $"StackTrace: {ex.StackTrace}",
+               functionName
+           );
+
                 return new List<GroupCode>();
             }
             finally
             {
-                // Log.Information("Ending function {FunctionName}", functionName);
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [END] - GroupCode process execution ended.",
+          functionName
+      );
             }
         }
         public async Task<object> RejistrationDetails(
-           string UserNme,
-           string status)
+    string UserNme,
+    string status)
         {
+            const string functionName = "RejistrationDetails";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Registration details process started.",
+                functionName
+            );
+
             try
             {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {UserNme}, Status: {status}",
+                    functionName
+                );
+
                 using var connection = new OdbcConnection(sConstr);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+                    functionName
+                );
 
                 await connection.OpenAsync();
 
-                switch (status?.ToLower())
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+                    functionName
+                );
+
+                string requestStatus = status?.ToLower()?.Trim() ?? "";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [STATUS] - Processing status: {requestStatus}",
+                    functionName
+                );
+
+                switch (requestStatus)
                 {
                     case "approval":
-                        return await GetApprovalDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Approval status selected. Calling GetApprovalDetails.",
+                            functionName
+                        );
+
+                        var approvalResult = await GetApprovalDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Approval details retrieved successfully.",
+                            functionName
+                        );
+
+                        return approvalResult;
+
 
                     case "draft":
-                        return await GetDraftDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Draft status selected. Calling GetDraftDetails.",
+                            functionName
+                        );
+
+                        var draftResult = await GetDraftDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Draft details retrieved successfully.",
+                            functionName
+                        );
+
+                        return draftResult;
+
 
                     case "pending":
-                        return await GetPendingDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Pending status selected. Calling GetPendingDetails.",
+                            functionName
+                        );
+
+                        var pendingResult = await GetPendingDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Pending details retrieved successfully.",
+                            functionName
+                        );
+
+                        return pendingResult;
+
 
                     case "completed":
-                        return await GetCompletedDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Completed status selected. Calling GetCompletedDetails.",
+                            functionName
+                        );
+
+                        var completedResult = await GetCompletedDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Completed details retrieved successfully.",
+                            functionName
+                        );
+
+                        return completedResult;
+
 
                     case "rejected":
-                        return await GetRejectedDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Rejected status selected. Calling GetRejectedDetails.",
+                            functionName
+                        );
+
+                        var rejectedResult = await GetRejectedDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Rejected details retrieved successfully.",
+                            functionName
+                        );
+
+                        return rejectedResult;
+
 
                     case "sap":
-                        return await GetSapDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - SAP status selected. Calling GetSapDetails.",
+                            functionName
+                        );
+
+                        var sapResult = await GetSapDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - SAP details retrieved successfully.",
+                            functionName
+                        );
+
+                        return sapResult;
+
 
                     case "created":
-                        return await GetCreatedVendorDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Created status selected. Calling GetCreatedVendorDetails.",
+                            functionName
+                        );
+
+                        var createdResult = await GetCreatedVendorDetails(connection, UserNme);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SUCCESS] - Created vendor details retrieved successfully.",
+                            functionName
+                        );
+
+                        return createdResult;
+
 
                     default:
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [VALIDATION_FAILED] - Invalid or unsupported status received: {requestStatus}",
+                            functionName
+                        );
+
                         return new List<object>();
                 }
             }
             catch (Exception ex)
             {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving registration details. " +
+                    $"UserName: {UserNme} | " +
+                    $"Status: {status} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
+
                 return new
                 {
                     success = false,
                     message = ex.Message
                 };
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Registration details process ended.",
+                    functionName
+                );
             }
         }
         private static string? GetString(
@@ -217,287 +417,729 @@ namespace VRF_API.Services
         }
 
         private async Task<List<PendingResponse>> GetPendingDetails(
-OdbcConnection connection,
-string userName)
+     OdbcConnection connection,
+     string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetApprovalDetails"" (?)";
+            const string functionName = "GetPendingDetails";
+            const string spName = "TEC_GetApprovalDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Pending details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<PendingResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new PendingResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<PendingResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    TradeName = GetString(reader, "TName"),
-                    BusinessState = GetString(reader, "Bstate"),
-                    NatureOfBusiness = GetString(
-                        reader,
-                        "NatureOfBusinessActivity"),
-                    GstNumber = GetString(reader, "GstNo"),
+                    list.Add(new PendingResponse
+                    {
+                        TradeName = GetString(reader, "TName"),
 
-                    AppliedDate = GetDate(
-                        reader,
-                        "DateOfEstablishment"),
+                        BusinessState = GetString(reader, "Bstate"),
 
+                        NatureOfBusiness = GetString(
+                            reader,
+                            "NatureOfBusinessActivity"),
 
-                });
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
+
+                        AppliedDate = GetDate(
+                            reader,
+                            "DateOfEstablishment")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Pending details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving pending details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<PendingResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Pending details retrieval ended.",
+                    functionName
+                );
+            }
         }
         private async Task<List<ApprovalResponse>> GetApprovalDetails(
-  OdbcConnection connection,
-  string userName)
+         OdbcConnection connection,
+         string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetApprovalWaitingDetails"" (?)";
+            const string functionName = "GetApprovalDetails";
+            const string spName = "TEC_GetApprovalWaitingDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Approval details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<ApprovalResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new ApprovalResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<ApprovalResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    TradeName = GetString(reader, "TName"),
-                    BusinessState = GetString(reader, "Bstate"),
-                    NatureOfBusiness = GetString(
-                        reader,
-                        "NatureOfBusinessActivity"),
-                    GstNumber = GetString(reader, "GstNo"),
+                    list.Add(new ApprovalResponse
+                    {
+                        TradeName = GetString(reader, "TName"),
 
-                    AppliedDate = GetDate(
-                        reader,
-                        "DateOfEstablishment"),
+                        BusinessState = GetString(
+                            reader,
+                            "Bstate"),
 
-                    WaitingorApproval = GetString(
-                        reader,
-                        "ApprovalWaiting"),
+                        NatureOfBusiness = GetString(
+                            reader,
+                            "NatureOfBusinessActivity"),
 
-                    DepartmentLevel = GetString(
-                        reader,
-                        "Level")
-                });
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
+
+                        AppliedDate = GetDate(
+                            reader,
+                            "DateOfEstablishment"),
+
+                        WaitingorApproval = GetString(
+                            reader,
+                            "ApprovalWaiting"),
+
+                        DepartmentLevel = GetString(
+                            reader,
+                            "Level")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Approval details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving approval details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<ApprovalResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Approval details retrieval ended.",
+                    functionName
+                );
+            }
         }
 
         private async Task<List<CompletedResponse>> GetCompletedDetails(
-    OdbcConnection connection,
-    string userName)
+      OdbcConnection connection,
+      string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetAprrovedDetails"" (?)";
+            const string functionName = "GetCompletedDetails";
+            const string spName = "TEC_GetAprrovedDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Completed details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<CompletedResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new CompletedResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<CompletedResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    TradeName = GetString(reader, "TName"),
-                    BusinessState = GetString(reader, "Bstate"),
-                    NatureOfBusiness = GetString(
-                        reader,
-                        "NatureOfBusinessActivity"),
-                    GstNumber = GetString(reader, "GstNo"),
+                    list.Add(new CompletedResponse
+                    {
+                        TradeName = GetString(
+                            reader,
+                            "TName"),
 
-                    AppliedDate = GetDate(
-                        reader,
-                        "DateOfEstablishment"),
+                        BusinessState = GetString(
+                            reader,
+                            "Bstate"),
 
-                    ApprovedDate = GetDate(
-                        reader,
-                        "ApprovedDate"),
+                        NatureOfBusiness = GetString(
+                            reader,
+                            "NatureOfBusinessActivity"),
 
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
 
-                });
+                        AppliedDate = GetDate(
+                            reader,
+                            "DateOfEstablishment"),
+
+                        ApprovedDate = GetDate(
+                            reader,
+                            "ApprovedDate")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Completed details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving completed details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<CompletedResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Completed details retrieval ended.",
+                    functionName
+                );
+            }
         }
 
         private async Task<List<DraftResponse>> GetDraftDetails(
     OdbcConnection connection,
     string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetDraftDetails"" (?)";
+            const string functionName = "GetDraftDetails";
+            const string spName = "TEC_GetDraftDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Draft details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<DraftResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new DraftResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<DraftResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    TradeName = GetString(reader, "TName"),
-                    BusinessState = GetString(reader, "Bstate"),
+                    list.Add(new DraftResponse
+                    {
+                        TradeName = GetString(
+                            reader,
+                            "TName"),
 
-                    NatureOfBusiness = GetString(
-                        reader,
-                        "NatureOfBusinessActivity"),
+                        BusinessState = GetString(
+                            reader,
+                            "Bstate"),
 
-                    GstNumber = GetString(reader, "GstNo"),
+                        NatureOfBusiness = GetString(
+                            reader,
+                            "NatureOfBusinessActivity"),
 
-                    AppliedDate = GetDate(
-                        reader,
-                        "DateOfEstablishment")
-                });
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
+
+                        AppliedDate = GetDate(
+                            reader,
+                            "DateOfEstablishment")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Draft details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving draft details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<DraftResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Draft details retrieval ended.",
+                    functionName
+                );
+            }
         }
 
         private async Task<List<RejectedResponse>> GetRejectedDetails(
-    OdbcConnection connection,
-    string userName)
+      OdbcConnection connection,
+      string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetRejectedDetails"" (?)";
+            const string functionName = "GetRejectedDetails";
+            const string spName = "TEC_GetRejectedDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Rejected details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<RejectedResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new RejectedResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<RejectedResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    TradeName = GetString(reader, "TName"),
+                    list.Add(new RejectedResponse
+                    {
+                        TradeName = GetString(
+                            reader,
+                            "TName"),
 
-                    BusinessState = GetString(
-                        reader,
-                        "Bstate"),
+                        BusinessState = GetString(
+                            reader,
+                            "Bstate"),
 
-                    NatureOfBusiness = GetString(
-                        reader,
-                        "NatureOfBusinessActivity"),
+                        NatureOfBusiness = GetString(
+                            reader,
+                            "NatureOfBusinessActivity"),
 
-                    GstNumber = GetString(
-                        reader,
-                        "GstNo"),
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
 
-                    AppliedDate = GetDate(
-                        reader,
-                        "DateOfEstablishment"),
+                        AppliedDate = GetDate(
+                            reader,
+                            "DateOfEstablishment"),
 
-                    RejectedDate = GetDate(
-                        reader,
-                        "RejectedDate"),
+                        RejectedDate = GetDate(
+                            reader,
+                            "RejectedDate"),
 
-                    RejectedReason = GetString(
-                        reader,
-                        "RejectedReason")
-                });
+                        RejectedReason = GetString(
+                            reader,
+                            "RejectedReason")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Rejected details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving rejected details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<RejectedResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Rejected details retrieval ended.",
+                    functionName
+                );
+            }
         }
 
         private async Task<List<SapResponse>> GetSapDetails(
-    OdbcConnection connection,
-    string userName)
+      OdbcConnection connection,
+      string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetSapPostDetails"" (?)";
+            const string functionName = "GetSapDetails";
+            const string spName = "TEC_GetSapPostDetails";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - SAP details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<SapResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new SapResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<SapResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    VendorName = GetString(
-                        reader,
-                        "VendorName"),
+                    list.Add(new SapResponse
+                    {
+                        VendorName = GetString(
+                            reader,
+                            "VendorName"),
 
-                    TradeName = GetString(
-                        reader,
-                        "TName"),
+                        TradeName = GetString(
+                            reader,
+                            "TName"),
 
-                    GstNumber = GetString(
-                        reader,
-                        "GstNo"),
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo"),
 
-                    SaprejReson = GetString(
-                        reader,
-                        "SAPRejReason")
-                });
+                        SaprejReson = GetString(
+                            reader,
+                            "SAPRejReason")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - SAP details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving SAP details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<SapResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - SAP details retrieval ended.",
+                    functionName
+                );
+            }
         }
-
-
         private async Task<List<CreatedVendorResponse>>
-    GetCreatedVendorDetails(
-        OdbcConnection connection,
-        string userName)
+            GetCreatedVendorDetails(
+                OdbcConnection connection,
+                string userName)
         {
-            string query =
-                $@"CALL ""{sDBName}"".""TEC_GetPostedVendors"" (?)";
+            const string functionName = "GetCreatedVendorDetails";
+            const string spName = "TEC_GetPostedVendors";
 
-            using var cmd = new OdbcCommand(query, connection);
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Created vendor details retrieval started.",
+                functionName
+            );
 
-            cmd.Parameters.AddWithValue("@UserName", userName);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            List<CreatedVendorResponse> list = new();
-
-            while (await reader.ReadAsync())
+            try
             {
-                list.Add(new CreatedVendorResponse
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - UserName: {userName}",
+                    functionName
+                );
+
+                string query =
+                    $@"CALL ""{sDBName}"".""{spName}"" (?)";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Preparing to execute stored procedure: {spName}",
+                    functionName
+                );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+                cmd.Parameters.AddWithValue("@UserName", userName);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing stored procedure: {spName}",
+                    functionName
+                );
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+                    functionName
+                );
+
+                List<CreatedVendorResponse> list = new();
+
+                int recordCount = 0;
+
+                while (await reader.ReadAsync())
                 {
-                    CardCode = GetString(
-                        reader,
-                        "CardCode"),
+                    list.Add(new CreatedVendorResponse
+                    {
+                        CardCode = GetString(
+                            reader,
+                            "CardCode"),
 
-                    GstNumber = GetString(
-                        reader,
-                        "GstNo")
-                });
+                        GstNumber = GetString(
+                            reader,
+                            "GstNo")
+                    });
+
+                    recordCount++;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Created vendor details retrieved successfully. " +
+                    $"Total records loaded: {recordCount}",
+                    functionName
+                );
+
+                return list;
             }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving created vendor details. " +
+                    $"UserName: {userName} | " +
+                    $"Message: {ex.Message} | " +
+                    $"StackTrace: {ex.StackTrace}",
+                    functionName
+                );
 
-            return list;
+                return new List<CreatedVendorResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Created vendor details retrieval ended.",
+                    functionName
+                );
+            }
         }
-
-
 
         public DataTable ExecuteQueryForDataTable(string sQuery)
         {
@@ -507,7 +1149,7 @@ string userName)
             DataTable dt = new DataTable();
             try
             {
-                // log.WriteToLogFile_Debug("Starting the function", sFuncName);
+                 log.WriteToLogFile_Debug("Starting the function", sFuncName);
                 string SAP_Constr = sConstr;
                 SAP_Con = new OdbcConnection(SAP_Constr);
                 SAP_Con.Open();
@@ -521,13 +1163,13 @@ string userName)
                 OdbcDataAdapter SAP_da = new OdbcDataAdapter();
                 SAP_da.SelectCommand = SAP_Cmd;
                 SAP_da.Fill(dt);
-                //log.WriteToLogFile_Debug("Completed the function successfully", sFuncName);
+                log.WriteToLogFile_Debug("Completed the function successfully", sFuncName);
                 log.WriteToLogFile_Debug("[DBConnection] [ExecuteQueryForDataTable] [DB_END] - Query executed successfully, filled " + dt.Rows.Count + " rows", sFuncName);
                 return dt;
             }
             catch (Exception ex)
             {
-                // log.WriteToLogFile_Debug(ex.Message, sFuncName);
+                log.WriteToLogFile_Debug(ex.Message, sFuncName);
                 log.WriteToLogFile_Debug("[DBConnection] [ExecuteQueryForDataTable] [ERROR] - Exception occurred: " + ex.Message, sFuncName);
                 throw new Exception(ex.Message);
             }
@@ -682,11 +1324,15 @@ string userName)
             string UserName
             )
         {
+            const string functionName = "PushToSAP";
+            Company oCompany = null;
 
-            Company oCompany;
             string Id = string.Empty;
             string CardCode = string.Empty;
-
+            log.WriteToLogFile_Debug(
+      $"[{functionName}] [START] - SAP vendor posting process started.",
+      functionName
+  );
             try
             {
 
@@ -695,10 +1341,18 @@ string userName)
                 DataTable dataTable1 = null;
                 DataTable dataTable2 = null;
                 string VendorCode = string.Empty;
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [REQUEST] - VendorName: {VendorName} | " +
+          $"VendorType: {vendorType} | UserName: {UserName} | " +
+          $"GroupCode: {GroupCode}",
+          functionName
+      );
                 if (string.IsNullOrEmpty(GroupCode))
                 {
-
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [VALIDATION_FAILED] - Group Code is empty.",
+                functionName
+            );
                     return new ApiResponse
                     {
                         Status = ApiStatusEnum.Failure,
@@ -707,10 +1361,46 @@ string userName)
                         Data = null
                     };
                 }
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [VALIDATION] - Group Code validation successful.",
+           functionName
+       );
+
                 VendorCode += $"{vendorType}-{VendorName},";
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [DATABASE] - Fetching BP card details.",
+        functionName
+    );
+
                 dataTable = ExecuteQueryForDataTable($@"call ""{sDBName}"".""BPDetails"" ('CARDDETAILS')");
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - BP card details retrieved successfully.",
+         functionName
+     );
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Fetching vendor creation details.",
+                    functionName
+                );
+
                 dataTable1 = ExecuteQueryForDataTable($@"call ""{sDBName}"".""VendorCreation""('" + gstNumber + "','" + VendorCode + "')");
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [DATABASE] - Vendor creation details retrieved successfully. " +
+            $"Total records: {dataTable1?.Rows.Count ?? 0}",
+            functionName
+        );
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Fetching SAP series details.",
+                    functionName
+                );
+
+
                 dataTable2 = ExecuteQueryForDataTable($@"call ""{sDBName}"".""BPDetails"" ('SERIES')");
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - SAP series details retrieved successfully.",
+          functionName
+      );
 
                 string DBName = _configuration["ApprovalPosting:DBName"];
                 string DB = _configuration["ApprovalPosting:DBName1"];
@@ -720,6 +1410,10 @@ string userName)
                 string loginURL = _configuration["ApprovalPosting:loginURL"];
                 string StrRouteVal = "";
 
+                log.WriteToLogFile_Debug(
+      $"[{functionName}] [CONFIGURATION] - SAP configuration loaded successfully.",
+      functionName
+  );
 
                 oCompany = new Company
                 {
@@ -731,11 +1425,21 @@ string userName)
                     Password = DecryptFun(_configuration["ApprovalPosting:SAPPassword"]),
                     language = BoSuppLangs.ln_English,
                     UseTrusted = false
-                };
 
+                };
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SAP_CONNECTION] - Connecting to SAP Business One.",
+           functionName
+       );
                 if (oCompany.Connect() != 0)
                 {
                     string err = oCompany.GetLastErrorDescription();
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [SAP_CONNECTION_FAILED] - SAP connection failed. " +
+               $"Error: {err}",
+               functionName
+           );
+
                     return new ApiResponse
                     {
                         Status = ApiStatusEnum.Failure,
@@ -745,18 +1449,35 @@ string userName)
                     };
                 }
 
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [SAP_CONNECTION] - Connected to SAP Business One successfully.",
+            functionName
+        );
                 BusinessPartners oBusinessPartner = (BusinessPartners)oCompany.GetBusinessObject(BoObjectTypes.oBusinessPartners);
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SAP_OBJECT] - Business Partner object created successfully.",
+           functionName
+       );
+
                 for (int i = 0; i < dataTable1.Rows.Count; i++)
                 {
 
                     Id = dataTable1.Rows[i]["Id"].ToString();
                     CardCode = dataTable1.Rows[i]["CardCode"].ToString();
-                    //string tempFolderPath = ConfigurationManager.AppSettings["TempAttachmentPath"];
+                    log.WriteToLogFile_Debug(
+                 $"[{functionName}] [VENDOR_START] - Processing vendor. " +
+                 $"Id: {Id} | CardCode: {CardCode}",
+                 functionName
+             );
+
                     string tempFolderPath = GetSingleValue($@"select ""AttachPath"" from ""{DB}"".""OADP""");
                     if (!Directory.Exists(tempFolderPath))
                     {
                         Directory.CreateDirectory(tempFolderPath);
+                        log.WriteToLogFile_Debug(
+                  $"[{functionName}] [ATTACHMENT] - Attachment directory created: {tempFolderPath}",
+                  functionName
+              );
                     }
 
                     List<Attachments2_Lines> attachmentLines = new List<Attachments2_Lines>();
@@ -767,6 +1488,11 @@ string userName)
 
 
                     int count1 = Convert.ToInt32(count);
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [ATTACHMENT] - Attachment records found: {count1} | Id: {Id}",
+              functionName
+          );
+
                     for (int j = 1; j <= count1; j++)
                     {
                         string base64String;
@@ -796,6 +1522,11 @@ string userName)
                             else
                             {
                                 Console.WriteLine("File not found: " + filepath);
+                                log.WriteToLogFile_Debug(
+                          $"[{functionName}] [ATTACHMENT] - Source file not found. " +
+                          $"Id: {Id} | LineId: {j}",
+                          functionName
+                      );
                             }
 
                             byte[] fileBytes = Convert.FromBase64String(base64String);
@@ -810,6 +1541,11 @@ string userName)
                             };
 
                             attachmentLines.Add(line);
+                            log.WriteToLogFile_Debug(
+                      $"[{functionName}] [ATTACHMENT] - Attachment prepared. " +
+                      $"Id: {Id} | LineId: {j}",
+                      functionName
+                  );
                         }
                     }
                     // After filling your attachmentLines list
@@ -819,14 +1555,19 @@ string userName)
                     };
 
                     string json = JsonConvert.SerializeObject(wrapper, Formatting.Indented);
-                    //  log.WriteToLogFile_Debug("Attachment Json : " + json, "VendorCreation");
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [ATTACHMENT] - Total attachments prepared: " +
+                        $"{attachmentLines.Count} | Id: {Id}",
+                        functionName
+                    );
                     string Discount = GetSingleValue($@"Select ifnull(""DisCount"",'0') from ""{DBName}"".""PaymentDetails"" where ""Id"" = '{dataTable1.Rows[i]["Id"].ToString()}'");
-                    //  log.WriteToLogFile_Debug("Discount : " + Discount, "VendorCreation");
+                     log.WriteToLogFile_Debug("Discount : " + Discount, "VendorCreation");
                     if (string.IsNullOrEmpty(Discount)) Discount = "0";
                     string CreditDays = GetSingleValue($@"Call ""{DBName}"".""TEC_GetCreditDaysDetails""('" + dataTable1.Rows[i]["Id"].ToString() + "')") != "" ? GetSingleValue($@"Call ""{DBName}"".""TEC_GetCreditDaysDetails""('" + dataTable1.Rows[i]["Id"].ToString() + "')") : "0";
-                    // log.WriteToLogFile_Debug("CreditDays : " + CreditDays, "VendorCreation");
+                   log.WriteToLogFile_Debug("CreditDays : " + CreditDays, "VendorCreation");
                     string creditcode = GetSingleValue($@"Select Trim(""CreditDays"") from ""{DBName}"".""PaymentDetails"" where ""Id""='" + dataTable1.Rows[i]["Id"].ToString() + "'");
-                    // log.WriteToLogFile_Debug("CreditCode : " + creditcode, "VendorCreation");
+                    log.WriteToLogFile_Debug("CreditCode : " + creditcode, "VendorCreation");
                     string creditDaysNumber = new string(CreditDays.Where(char.IsDigit).ToArray());
 
                     // creditCode is already numeric, but still clean it just in case
@@ -836,17 +1577,36 @@ string userName)
                     string result = (creditDaysNumber == creditCodeNumber) ? "nodefault" : "default";
 
                     string GroupNum = GetSingleValue($@"call ""{DBName}"".""TEC_GetGroupNum"" ('" + CreditDays + "')") != "" ? GetSingleValue($@"call ""{DBName}"".""TEC_GetGroupNum"" ('" + CreditDays + "')") : "0";
-                    // log.WriteToLogFile_Debug("GroupNum : " + GroupNum, "VendorCreation");
-                    // log.WriteToLogFile_Debug("GroupCode : " + groupCode, "VendorCreation");
+                     log.WriteToLogFile_Debug("GroupNum : " + GroupNum, "VendorCreation");
+                     log.WriteToLogFile_Debug("GroupCode : " + GroupCode, "VendorCreation");
                     string Remarks = GetSingleValue($@"Call ""{DBName}"".""GetRemarks""('" + dataTable1.Rows[i]["GstNo"].ToString() + "')");
-                    // log.WriteToLogFile_Debug("Remarks : " + Remarks, "VendorCreation");
+                     log.WriteToLogFile_Debug("Remarks : " + Remarks, "VendorCreation");
                     string rDoc = "0";
+                    log.WriteToLogFile_Debug(
+           $"[{functionName}] [SAP_LOGIN] - Logging into SAP Service Layer.",
+           functionName
+       );
+
                     string sessionId = Login(TransURL, DB, user, Pass, out StrRouteVal);
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [SAP_LOGIN] - SAP Service Layer login completed.",
+                functionName
+            );
                     string strRoutevalue = "";
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [ATTACHMENT_POST] - Posting attachments to SAP. " +
+              $"Id: {Id}",
+              functionName
+          );
                     string Result = TransactionPosting(TransURL + "Attachments2", json, sessionId, "Attachment", strRoutevalue, DB);
-                    //  log.WriteToLogFile_Debug("Attachment Result : " + Result, "VendorCreation");
+                      log.WriteToLogFile_Debug("Attachment Result : " + Result, "VendorCreation");
                     int AbsEntry = Convert.ToInt32(Result);
-                    //  log.WriteToLogFile_Debug("Attachment Entry : " + AbsEntry, "VendorCreation");
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [ATTACHMENT_POST] - Attachment posted successfully. " +
+              $"AttachmentEntry: {AbsEntry} | Id: {Id}",
+              functionName
+          );
+
                     Id = dataTable1.Rows[i]["Id"].ToString();
                     Vendor1 vendor = new Vendor1
                     {
@@ -905,6 +1665,11 @@ string userName)
                     string json1 = JsonConvert.SerializeObject(vendor);
                     LogVendorJson(vendor.CardCode, json1);
 
+                    log.WriteToLogFile_Debug(
+           $"[{functionName}] [VENDOR_OBJECT] - SAP Business Partner object populated. " +
+           $"CardCode: {CardCode} | Id: {Id}",
+           functionName
+       );
 
 
                     {
@@ -976,15 +1741,31 @@ string userName)
 
 
                         oBusinessPartner.AttachmentEntry = AbsEntry;
-
+                        log.WriteToLogFile_Debug(
+               $"[{functionName}] [SAP_OBJECT] - Business Partner data prepared for SAP Add. " +
+               $"CardCode: {CardCode} | Id: {Id}",
+               functionName
+           );
+                        log.WriteToLogFile_Debug(
+             $"[{functionName}] [SAP_POST] - Adding Business Partner to SAP. " +
+             $"CardCode: {CardCode}",
+             functionName
+         );
                     }
                     if (oBusinessPartner.Add() != 0)
                     {
                         string err = oCompany.GetLastErrorDescription();
-                        //Console.WriteLine($"Error: {oCompany.GetLastErrorDescription()}");
-                        //Log.WriteToLogFile_Debug(err, "SAP Posting");
+                        log.WriteToLogFile_Debug(
+                   $"[{functionName}] [SAP_POST_FAILED] - Business Partner creation failed. " +
+                   $"Id: {Id} | CardCode: {CardCode} | Error: {err}",
+                   functionName
+               );
                         string error = err.Replace("'", "") + "'||'Vendor-'||'" + dataTable1.Rows[i]["CardCode"].ToString();
                         string update = $@"update ""{sDBName}"".""TEC_OLED"" set ""SAPRejReason""='{error}' where ""Id""='{dataTable1.Rows[i]["Id"].ToString()}'";
+                        log.WriteToLogFile_Debug(
+                $"[{functionName}] [DATABASE] - SAP rejection reason updated. Id: {Id}",
+                functionName
+            );
 
                         ExecuteNonQuery(update);
 
@@ -997,10 +1778,11 @@ string userName)
                         };
 
                     }
+
                     else
                     {
 
-                        //  Log.WriteToLogFile_Debug("Posting Completed for the Traders" + dataTable1.Rows[i]["TName"].ToString() + "    Completed Successfully.", "SAP Posting");
+                        log.WriteToLogFile_Debug("Posting Completed for the Traders" + dataTable1.Rows[i]["TName"].ToString() + "    Completed Successfully.", "SAP Posting");
                         string update = "";
                         if (result == "nodefault")
                         {
@@ -1013,19 +1795,40 @@ string userName)
                         string toMail = GetSingleValue($@"Select ""EmailId"" from ""{sDBName}"".""TEC_OLED"" where ""Id"" = '{dataTable1.Rows[i]["Id"].ToString()} '");
 
                         ExecuteNonQuery(update);
-
+                        log.WriteToLogFile_Debug(
+              $"[{functionName}] [DATABASE] - Vendor SAP status updated successfully. " +
+              $"Id: {Id}",
+              functionName
+          );
                         SentMail(toMail, gstNumber, dataTable1.Rows[i]["CardCode"].ToString());
+                        log.WriteToLogFile_Debug(
+              $"[{functionName}] [EMAIL] - Vendor creation email sent successfully. " +
+              $"Id: {Id}",
+              functionName
+          );
 
 
                         ExecuteNonQuery($@"Insert into ""{sDBName}"".""Mail_Log"" (""GstNo"",""Type"",""ActionDate"") values('{dataTable1.Rows[i]["GstNo"].ToString()}','Created',Current_Date)");
+
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [MAIL_LOG] - Mail log inserted successfully. " +
+                            $"Id: {Id}",
+                            functionName
+                        );
                     }
 
                     if (!(string.IsNullOrEmpty(CardCode)))
                     {
+                        log.WriteToLogFile_Debug(
+                   $"[{functionName}] [SUCCESS] - Business Partner added successfully. " +
+                   $"CardCode: {CardCode} | Id: {Id}",
+                   functionName
+               );
                         string message = "Business Partner added successfully!";
 
 
-
+                   
 
                         return new ApiResponse
                         {
@@ -1042,6 +1845,10 @@ string userName)
 
                 }
 
+                log.WriteToLogFile_Debug(
+   $"[{functionName}] [SUCCESS] - SAP vendor posting completed successfully.",
+   functionName
+);
 
 
                 return new ApiResponse
@@ -1053,24 +1860,87 @@ string userName)
                 };
             }
             catch (Exception ex)
-            {
-                string update = $@"update ""{sDBName}"".""TEC_OLED"" set ""SAPRejReason""='{ex.Message.Replace("'", "")}'||'-->Vendor-->'||'{CardCode}' where ""Id""='{Id}'";
+            { 
+              log.WriteToLogFile_Debug(
+            $"[{functionName}] [EXCEPTION] - Error while posting vendor to SAP. " +
+            $"Id: {Id} | CardCode: {CardCode} | " +
+            $"Message: {ex.Message} | StackTrace: {ex.StackTrace}",
+            functionName
+        );
 
-                ExecuteNonQuery(update);
+                try
+                {
+                    string update =
+                        $@"update ""{sDBName}"".""TEC_OLED""
+                   set ""SAPRejReason""='{ex.Message.Replace("'", "")}'
+                   ||'-->Vendor-->'||'{CardCode}'
+                   where ""Id""='{Id}'";
+
+                    ExecuteNonQuery(update);
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - Exception details updated in TEC_OLED. " +
+                        $"Id: {Id}",
+                        functionName
+                    );
+                }
+                catch (Exception updateEx)
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE_UPDATE_EXCEPTION] - " +
+                        $"Failed to update SAP rejection reason. " +
+                        $"Id: {Id} | Message: {updateEx.Message}",
+                        functionName
+                    );
+                }
 
                 return new ApiResponse
                 {
                     Status = ApiStatusEnum.Failure,
-                    Message = "An error occurred while processing the login.",
+                    Message = ex.Message,
+                    ErrorCode = ErrorCodeEnum.Failure,
                     Data = null
                 };
 
             }
             finally
             {
-                // Disconnect from the company
+             oCompany.Disconnect();
+                try
+                {
+                    if (oCompany != null)
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SAP_DISCONNECT] - Disconnecting from SAP Business One.",
+                            functionName
+                        );
 
-                Console.WriteLine("Disconnected from SAP Business One.");
+                        if (oCompany.Connected)
+                        {
+                            oCompany.Disconnect();
+                        }
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [SAP_DISCONNECT] - SAP Business One disconnected successfully.",
+                            functionName
+                        );
+                    }
+                }
+                catch (Exception disconnectEx)
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [SAP_DISCONNECT_EXCEPTION] - " +
+                        $"Error while disconnecting from SAP. " +
+                        $"Message: {disconnectEx.Message}",
+                        functionName
+                    );
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - SAP vendor posting process ended. " +
+                    $"Id: {Id} | CardCode: {CardCode}",
+                    functionName
+                );
             }
         }
         private async Task<(bool Success, string Message)> SentMail(
@@ -1078,38 +1948,58 @@ string userName)
       string selectedGST,
       string cardCode)
         {
+            const string functionName = "SentMail";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor mail process started.",
+                functionName
+            );
             try
             {
                 string gstNo = selectedGST?.Trim() ?? "";
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [REQUEST] - Mail request received. " +
+           $"CardCode: {cardCode} | ToMail: {toMail}",
+           functionName
+       );
 
                 if (string.IsNullOrWhiteSpace(gstNo))
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [VALIDATION_FAILED] - GST Number is required.",
+               functionName
+           );
+
                     return (false, "GST Number is required.");
                 }
-
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [VALIDATION] - GST validation successful.",
+           functionName
+       );
                 log.WriteToLogFile_Debug(
                     "SendVendorMail started",
                     "Mail"
                 );
 
-                // =====================================================
-                // GET VENDOR DETAILS
-                // =====================================================
-
+ 
                 DataTable ds = GetVendorDetails(gstNo);
 
                 if (ds == null || ds.Rows.Count == 0)
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [VALIDATION_FAILED] - Vendor details not found.",
+               functionName
+           );
                     return (false, "Vendor details not found.");
                 }
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Vendor details retrieved successfully. " +
+          $"Records: {ds.Rows.Count}",
+          functionName
+      );
                 DataRow dr = ds.Rows[0];
 
                 var data = new Dictionary<string, object>();
-
-                // =====================================================
-                // BASIC INFORMATION
-                // =====================================================
 
                 data["GST Number"] =
                     dr["GstNo"]?.ToString() ?? "";
@@ -1146,6 +2036,12 @@ string userName)
 
                 data["Contact Person"] =
                     dr["ContactPersonName"]?.ToString() ?? "";
+
+
+                log.WriteToLogFile_Debug(
+       $"[{functionName}] [DATA] - Vendor basic details prepared.",
+       functionName
+   );
 
                 // =====================================================
                 // ADDRESS DETAILS
@@ -1187,6 +2083,12 @@ string userName)
                     $"{dr["Gcountry"]}-" +
                     $"{dr["Gzipcode"]}";
 
+
+                log.WriteToLogFile_Debug(
+       $"[{functionName}] [DATA] - Vendor address details prepared.",
+       functionName
+   );
+
                 // =====================================================
                 // BANK DETAILS
                 // =====================================================
@@ -1208,7 +2110,10 @@ string userName)
 
                 data["Bank Address"] =
                     dr["BankAddress"]?.ToString() ?? "";
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATA] - Bank details prepared.",
+          functionName
+      );
                 // =====================================================
                 // MSME
                 // =====================================================
@@ -1225,12 +2130,20 @@ string userName)
                 // =====================================================
                 // REMARKS
                 // =====================================================
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Fetching vendor remarks.",
+         functionName
+     );
 
                 string remarks = db.GetSingleValue(
                     $@"Call ""{sDBName}"".""GetRemarks""('{gstNo}')"
                 );
 
                 data["Remarks"] = remarks ?? "";
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Vendor remarks retrieved successfully.",
+           functionName
+       );
 
                 // =====================================================
                 // DATE / LOCATION
@@ -1244,6 +2157,11 @@ string userName)
                 // =====================================================
                 // PAYMENT DETAILS
                 // =====================================================
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Fetching payment details.",
+                    functionName
+                );
 
                 string id = db.GetSingleValue(
                     $@"select * 
@@ -1294,7 +2212,10 @@ string userName)
                     data["md18_without"] =
                         paymentRow["MarkDownWithoutTax18"]?.ToString() ?? "";
                 }
-
+                log.WriteToLogFile_Debug(
+                $"[{functionName}] [DATABASE] - Payment details retrieved successfully.",
+                functionName
+            );
                 // =====================================================
                 // BUSINESS / AGENCY
                 // =====================================================
@@ -1326,6 +2247,10 @@ string userName)
 
                 data["Code"] =
                     cardCode ?? "";
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Loading vendor goods details.",
+         functionName
+     );
 
                 // =====================================================
                 // MAJOR GOODS
@@ -1333,11 +2258,19 @@ string userName)
 
                 List<GoodItem> goods =
                     LoadGoodsByGST(gstNo);
+                log.WriteToLogFile_Debug(
+       $"[{functionName}] [DATABASE] - Vendor goods details loaded successfully. " +
+       $"Total items: {goods?.Count ?? 0}",
+       functionName
+   );
 
                 // =====================================================
                 // GENERATE HTML
                 // =====================================================
-
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [HTML] - Generating vendor HTML.",
+         functionName
+     );
                 string htmlContent =
                     db.GenerateVendorHtmlWithData(
                         data,
@@ -1370,11 +2303,18 @@ string userName)
                     mailTemplate.Trim().ToUpper() == "REJECT"
                         ? "REJECT"
                         : "SAP";
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [TEMPLATE] - Mail template type determined: {templateType}",
+            functionName
+        );
                 // =====================================================
                 // GET MAIL TEMPLATE
                 // =====================================================
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Fetching mail template. " +
+          $"TemplateType: {templateType}",
+          functionName
+      );
                 DataTable mailTemplateTable =
                     db.ExecuteQueryForDataTable(
                         $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT_1""('{templateType}')"
@@ -1401,9 +2341,20 @@ string userName)
                         ccMails =
                             row["CCMail"]?.ToString() ?? "";
                     }
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [TEMPLATE] - Mail template retrieved successfully. " +
+              $"TemplateType: {templateType}",
+              functionName
+          );
                 }
                 else
                 {
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [TEMPLATE_NOT_FOUND] - Mail template not found. " +
+                $"TemplateType: {templateType}",
+                functionName
+            );
+
                     return (
                         false,
                         $"Mail template not found for {templateType}."
@@ -1431,6 +2382,10 @@ string userName)
                         "{Remarks}",
                         _sessionManager.Get("RejectRemarks") ?? ""
                     );
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [TEMPLATE] - Reject remarks replaced in mail body.",
+              functionName
+          );
                 }
                 else
                 {
@@ -1444,6 +2399,10 @@ string userName)
                         "{Vendor Code}",
                         data["Code"]?.ToString() ?? ""
                     );
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [TEMPLATE] - Vendor code replaced in mail body.",
+                functionName
+            );
                 }
 
                 // =====================================================
@@ -1469,7 +2428,11 @@ string userName)
                     )
                         ? smtpPort
                         : 25;
-
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [SMTP] - SMTP configuration loaded. " +
+        $"Server: {server} | Port: {port}",
+        functionName
+    );
                 // =====================================================
                 // SEND MAIL
                 // =====================================================
@@ -1479,7 +2442,11 @@ string userName)
                 {
                     mail.From =
                         new MailAddress(fromMail);
-
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [MAIL] - Preparing mail recipients. " +
+                $"ToMail: {toMail} | AgentMail: {agentMail}",
+                functionName
+            );
                     // =================================================
                     // LOG MAIL DETAILS
                     // =================================================
@@ -1498,7 +2465,11 @@ string userName)
                         "CC Mail : " + ccMails,
                         "Mail"
                     );
-
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [MAIL] - Mail recipients configured successfully. " +
+              $"ToCount: {mail.To.Count} | CCCount: {mail.CC.Count}",
+              functionName
+          );
                     // =================================================
                     // TO MAIL
                     // =================================================
@@ -1571,6 +2542,10 @@ string userName)
                                 "application/pdf"
                             )
                         );
+                        log.WriteToLogFile_Debug(
+                 $"[{functionName}] [MAIL] - PDF attachment added successfully.",
+                 functionName
+             );
 
                         // =============================================
                         // SMTP
@@ -1609,26 +2584,32 @@ string userName)
                 // SUCCESS
                 // =====================================================
 
-                if (templateType == "REJECT")
-                {
-                    return (
-                        true,
-                        "Reject mail sent successfully."
-                    );
-                }
+                string successMessage =
+             templateType == "REJECT"
+                 ? "Reject mail sent successfully."
+                 : "Mail sent successfully.";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - {successMessage} " +
+                    $"CardCode: {cardCode}",
+                    functionName
+                );
 
                 return (
                     true,
-                    "Mail sent successfully."
+                    successMessage
                 );
             }
             catch (Exception ex)
             {
                 log.WriteToLogFile_Debug(
-                    "Error while sending mail : " +
-                    ex.Message,
-                    "Mail"
-                );
+            $"[{functionName}] [EXCEPTION] - Error while sending vendor mail. " +
+            $"CardCode: {cardCode} | " +
+            $"ToMail: {toMail} | " +
+            $"Message: {ex.Message} | " +
+            $"StackTrace: {ex.StackTrace}",
+            functionName
+        );
 
                 return (
                     false,
@@ -1636,24 +2617,162 @@ string userName)
                     ex.Message
                 );
             }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Vendor mail process ended. " +
+                    $"CardCode: {cardCode}",
+                    functionName
+                );
+            }
         }
         private DataTable GetVendorDetails(string gstNo)
         {
-            string query = $@"select * from ""{sDBName}"".""TEC_OLED"" where ""GstNo""='{gstNo}'";
-            // log.WriteToLogFile_Debug("GetVendorDetails Query : " + query, "Mail");
-            DataTable dt = ExecuteQueryForDataTable(query);
-            return dt;
-        }
+            const string functionName = "GetVendorDetails";
 
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor details retrieval started.",
+                functionName
+            );
+
+            try
+            {
+                string query =
+                    $@"select * 
+               from ""{sDBName}"".""TEC_OLED"" 
+               where ""GstNo""='{gstNo}'";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - Fetching vendor details for GST Number.",
+                    functionName
+                );
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing vendor details query.",
+                    functionName
+                );
+
+                DataTable dt = ExecuteQueryForDataTable(query);
+
+                if (dt == null || dt.Rows.Count == 0)
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - No vendor details found.",
+                        functionName
+                    );
+
+                    return dt;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Vendor details retrieved successfully. " +
+                    $"Records: {dt.Rows.Count}",
+                    functionName
+                );
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Vendor details retrieval completed successfully.",
+                    functionName
+                );
+
+                return dt;
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while retrieving vendor details. " +
+                    $"Message: {ex.Message} | StackTrace: {ex.StackTrace}",
+                    functionName
+                );
+
+                return null;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Vendor details retrieval ended.",
+                    functionName
+                );
+            }
+        }
         private List<GoodItem> LoadGoodsByGST(string gstNo)
         {
-            List<GoodItem> goods = new List<GoodItem>();
-            string Id = GetSingleValue($@"select * from ""{sDBName}"".""TEC_OLED"" where ""GstNo""='{gstNo}'");
-            string query = $@"select * from ""{sDBName}"".""TEC_LED4"" where ""Id""='{Id}'";
-            DataTable dt = ExecuteQueryForDataTable(query);
-            if (dt.Rows.Count > 0)
+            const string functionName = "LoadGoodsByGST";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Loading goods details started.",
+                functionName
+            );
+
+            try
             {
+                List<GoodItem> goods = new List<GoodItem>();
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - GST Number received for goods retrieval.",
+                    functionName
+                );
+
+                // Get Vendor ID
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Fetching vendor ID from TEC_OLED.",
+                    functionName
+                );
+
+                string Id = GetSingleValue(
+                    $@"select ""Id""
+               from ""{sDBName}"".""TEC_OLED""
+               where ""GstNo""='{gstNo}'"
+                );
+
+                if (string.IsNullOrWhiteSpace(Id))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - Vendor ID not found for the provided GST Number.",
+                        functionName
+                    );
+
+                    return goods;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Vendor ID retrieved successfully. " +
+                    $"Vendor ID: {Id}",
+                    functionName
+                );
+
+                // Get Goods Details
+                string query =
+                    $@"select * 
+               from ""{sDBName}"".""TEC_LED4"" 
+               where ""Id""='{Id}'";
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Fetching goods details from TEC_LED4.",
+                    functionName
+                );
+
+                DataTable dt = ExecuteQueryForDataTable(query);
+
+                if (dt == null || dt.Rows.Count == 0)
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [DATABASE] - No goods details found. " +
+                        $"Vendor ID: {Id}",
+                        functionName
+                    );
+
+                    return goods;
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Goods details retrieved successfully. " +
+                    $"Total records: {dt.Rows.Count}",
+                    functionName
+                );
+
                 int i = 1;
+
                 foreach (DataRow row in dt.Rows)
                 {
                     goods.Add(new GoodItem
@@ -1667,8 +2786,32 @@ string userName)
                         TaxPercentage = row["TaxPercentage"]?.ToString()
                     });
                 }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SUCCESS] - Goods details loaded successfully. " +
+                    $"Total items: {goods.Count}",
+                    functionName
+                );
+
+                return goods;
             }
-            return goods;
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while loading goods details. " +
+                    $"Message: {ex.Message} | StackTrace: {ex.StackTrace}",
+                    functionName
+                );
+
+                return new List<GoodItem>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Loading goods details ended.",
+                    functionName
+                );
+            }
         }
         //private string GenerateVendorHtmlWithData(Dictionary<string, object> data, List<GoodItem> goods)
         //{
@@ -1697,244 +2840,7 @@ string userName)
             }
             return $"<div class=\"items-section\" id=\"items_supplied\">{items}</div>";
         }
-       
-        //protected void SentMail(string toMail, string selectedGST, string CardCode)
-        //{
-        //    string gstNo = selectedGST;
-        //    string agentMail = string.Empty;
-        //    var data1 = new Dictionary<string, object>();
-        //    List<GoodItem> goods = new List<GoodItem>();
-        //   //  log.WriteToLogFile_Debug("SentMail started", "Mail");
-        //    DataTable ds = GetVendorDetails(gstNo);
-        //    // log.WriteToLogFile_Debug("Getting data", "Mail");
-        //    if (ds.Rows.Count > 0)
-        //    {
-        //        //  log.WriteToLogFile_Debug("Getting Row Data", "Mail");
-        //        DataRow dr = ds.Rows[0];
-
-        //        Dictionary<string, object> data = new Dictionary<string, object>();
-
-        //        // ===== Basic Info =====
-        //        data["GST Number"] = dr["GstNo"]?.ToString();
-        //        data["PAN Number"] = dr["PanNo"]?.ToString();
-        //        data["Trade Name"] = dr["TName"]?.ToString();
-        //        data["Nature of Business"] = dr["NatureOfBusinessActivity"]?.ToString();
-        //        data["Date of Establishment"] = dr["DateOfEstablishment"]?.ToString();
-        //        data["NHFS Contact Person"] = dr["ContactPerson"]?.ToString();
-        //        data["Designation"] = dr["DeclarationDesignation"]?.ToString();
-        //        data["Email ID"] = dr["EmailId"]?.ToString();
-        //        data["Mobile Number"] = dr["MobileNo"]?.ToString();
-        //        data["Office Telephone"] = dr["VerificationNo"]?.ToString();
-        //        data["TAN Number"] = dr["TANNo"]?.ToString();
-        //        data["Contact Person"] = dr["ContactPersonName"]?.ToString();
-        //        // ===== Address Details =====
-        //        data["Registered Address"] = dr["Raddress1"]?.ToString() + "," + dr["Raddress2"]?.ToString() + "," + dr["Raddress3"]?.ToString() + "," + dr["registeredOfficeCity"]?.ToString() + "," + dr["Rstate"]?.ToString() + "," + dr["Rcountry"]?.ToString() + "-" + dr["Rzipcode"]?.ToString();
-        //        data["Billing Address"] = dr["Baddress1"]?.ToString() + "," + dr["Baddress2"]?.ToString() + "," + dr["Baddress3"]?.ToString() + "," + dr["businessBillingCity"]?.ToString() + "," + dr["Bstate"]?.ToString() + "," + dr["Bcountry"]?.ToString() + "-" + dr["Bzipcode"]?.ToString();
-        //        data["Shipping Address"] = dr["Saddress1"]?.ToString() + "," + dr["Saddress2"]?.ToString() + "," + dr["Saddress3"]?.ToString() + "," + dr["Scity"]?.ToString() + "," + dr["Sstate"]?.ToString() + "," + dr["Scountry"]?.ToString() + "-" + dr["Szipcode"]?.ToString();
-        //        data["Goods Return Address"] = dr["Gaddress1"]?.ToString() + "," + dr["Gaddress2"]?.ToString() + "," + dr["Gaddress3"]?.ToString() + "," + dr["Gcity"]?.ToString() + "," + dr["Gstate"]?.ToString() + "," + dr["Gcountry"]?.ToString() + "-" + dr["Gzipcode"]?.ToString();
-
-        //        // ===== Financial / Bank =====
-        //        data["Bank Name"] = dr["BankName"]?.ToString();
-        //        data["Account Name"] = dr["AccountName"]?.ToString();
-        //        data["Account Number"] = dr["AccountNumber"]?.ToString();
-        //        data["IFSC Code"] = dr["IfscCode"]?.ToString();
-        //        data["Branch Code"] = dr["BranchCode"]?.ToString();
-        //        data["Bank Address"] = dr["BankAddress"]?.ToString();
-
-        //        // ===== MSME / Other Info =====
-        //        data["MSME Status"] = dr["MsmeRegistrationStatus"]?.ToString();
-        //        data["MSME Number"] = dr["MSMENo"]?.ToString();
-        //        data["Enterprise Type"] = dr["EnterpriseType"]?.ToString();
-        //        string Remarks = conn.GetSingleValue("Call \"GetRemarks\"('" + gstNo + "')");
-        //        data["Remarks"] = Remarks;
-
-        //        data["date"] = DateTime.Now.ToString("yyyy-MM-dd");
-        //        data["location"] = "TamilNadu";
-        //        // ===== Commercial Details =====
-        //        string Id = GetSingleValue($@"select * from ""{sDBName}"".""TEC_OLED"" where ""GstNo""='{gstNo}'");
-        //        DataTable dt = ExecuteQueryForDataTable($@"Select * from ""{sDBName}"".""PaymentDetails"" where ""Id""='{Id} '");
-
-        //       //  log.WriteToLogFile_Debug("Getting Payment details", "Mail");
-        //        if (dt.Rows.Count > 0)
-        //        {
-        //            DataRow dr1 = dt.Rows[0];
-        //            data["Credit Days"] = dr1["CreditDays"]?.ToString();
-        //            data["Discount"] = dr1["DisCount"]?.ToString();
-        //            data["md0_with"] = dr1["MarkDownTax0"]?.ToString();
-        //            data["md0_without"] = dr1["MarkDownWithoutTax0"]?.ToString();
-        //            data["md3_with"] = dr1["MarkDownTax3"]?.ToString();
-        //            data["md3_without"] = dr1["MarkDownWithoutTax3"]?.ToString();
-        //            data["md5_with"] = dr1["MarkDownTax5"]?.ToString();
-        //            data["md5_without"] = dr1["MarkDownWithoutTax5"]?.ToString();
-        //            data["md18_with"] = dr1["MarkDownTax18"]?.ToString();
-        //            data["md18_without"] = dr1["MarkDownWithoutTax18"]?.ToString();
-        //        }
-        //        // ===== Agency / Business Type =====
-        //        data["Business Type"] = dr["BusinessType"]?.ToString();
-        //        data["Agency Email"] = dr["AgencyEmail"]?.ToString();
-        //        data["Agency Name"] = dr["AgencyName"]?.ToString();
-        //        agentMail = dr["AgencyEmail"]?.ToString();
-        //        // ===== Declaration =====
-        //        data["Name"] = dr["DeclarationName"]?.ToString();
-        //        data["Designation"] = dr["DeclarationDesignation"]?.ToString();
-        //        data["Mobile No"] = dr["VerificationNo"]?.ToString();
-        //        data["Code"] = CardCode;
-        //        // ===== Major Goods / Related Tables =====
-        //        goods = LoadGoodsByGST(gstNo);
-        //        Session["MajorGoods"] = goods;
-
-        //        // ===== Other related grids (optional) =====
-        //        //AddGridToData(data, gvProjectDetails, "Business Location");
-        //        //AddGridToData(data, gvPartners, "Partners/Proprietor/Director's / Business Head Detail (Provide at Least One Person Details)");
-        //        //AddGridToData(data, gvOperationalContacts, "Primary Operational Contacts");
-        //        //AddGridToData(data, gvMajorGoods, "Major goods and services Details With");
-
-        //        //AddGridToData(data, gvMajorCustomers, "List of Major Customers");
-        //        //AddGridToData(data, gvOtherInformation, "Other Information");
-
-        //        // ===== Preview Redirect =====
-        //        data1 = data as Dictionary<string, object>;
-        //        //Session["PreviewData"] = JsonConvert.SerializeObject(data);
-        //    }
-        //    //var data1 = Session["PreviewData"] as Dictionary<string, object>;
-        //    string htmlContent = GenerateVendorHtmlWithData(data1, goods);
-        //     log.WriteToLogFile_Debug("Getting HtmlContent", "Mail");
-        //    byte[] pdfBytes = ConvertHtmlToPdf(htmlContent);
-        //     log.WriteToLogFile_Debug("Getting pdf", "Mail");
-        //    if (!string.IsNullOrEmpty(sRejectType) && sRejectType == "REJECT")
-        //    {
-        //        try
-        //        {
-        //            DataTable dt = dBConnection.ExecuteQueryForDataTable("Call \"Mail_BOSY&SUBJECT\"('REJECT')");
-        //            string body = "", subject = "", ccMails = "";
-
-        //            foreach (DataRow row in dt.Rows)
-        //            {
-        //                body = row["Body"].ToString();
-        //                subject = row["Subject"].ToString();
-        //                if (dt.Columns.Contains("CCMail")) ccMails = row["CCMail"].ToString();
-        //            }
-        //             log.WriteToLogFile_Debug("REJECT Mail Started", "Mail");
-        //            using (MailMessage mail = new MailMessage())
-        //            {
-        //                string frommail = ConfigurationManager.AppSettings["MAILID"];
-        //                string username = ConfigurationManager.AppSettings["SMTPUSER"];
-        //                string password = ConfigurationManager.AppSettings["SMTPPWD"];
-        //                string server = ConfigurationManager.AppSettings["SMTPSERVER"];
-        //                int port = Convert.ToInt32(ConfigurationManager.AppSettings["SMTPPORT"]);
-
-        //                mail.From = new MailAddress(frommail);
-        //                 log.WriteToLogFile_Debug("To Mail :" + toMail, "Mail");
-        //                 log.WriteToLogFile_Debug("Agent Mail :" + agentMail, "Mail");
-        //                 log.WriteToLogFile_Debug("CC Mail :" + ccMails, "Mail");
-        //                if (!string.IsNullOrWhiteSpace(toMail))
-        //                    mail.To.Add(toMail.Trim());
-
-        //                // AGENT MAIL
-        //                if (!string.IsNullOrWhiteSpace(agentMail))
-        //                    mail.To.Add(agentMail.Trim());
-
-        //                if (!string.IsNullOrWhiteSpace(ccMails))
-        //                {
-        //                    foreach (var cc in ccMails.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
-        //                        mail.CC.Add(cc.Trim());
-        //                }
-
-        //                mail.Subject = subject;
-        //                body = body.Replace("{Vendor Name}", data1["Trade Name"].ToString());
-        //                body = body.Replace("{Remarks}", Session["RejectRemarks"].ToString());
-        //                mail.Body = body;
-        //                mail.IsBodyHtml = true;
-
-        //                using (MemoryStream ms = new MemoryStream(pdfBytes))
-        //                {
-        //                    mail.Attachments.Add(new System.Net.Mail.Attachment(ms, "VendorRegistrationForm.pdf", "application/pdf"));
-
-        //                    using (SmtpClient smtp = new SmtpClient(server, port))
-        //                    {
-        //                        smtp.Credentials = new System.Net.NetworkCredential(username, password);
-        //                        smtp.EnableSsl = true;
-        //                         log.WriteToLogFile_Debug("Mail sending", "Mail");
-        //                        smtp.Send(mail);
-        //                         log.WriteToLogFile_Debug("Mail Ended", "Mail");
-        //                    }
-        //                }
-        //            }
-
-        //            ScriptManager.RegisterStartupScript(this, GetType(), "mailSuccess", "alert('Mail sent successfully!');", true);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //             log.WriteToLogFile_Debug("Error while sending mail : " + ex.Message, "Mail");
-        //            ScriptManager.RegisterStartupScript(this, GetType(), "mailError", $"alert('Error sending mail: {ex.Message}');", true);
-        //        }
-        //    }
-        //    else
-        //    {
-        //        try
-        //        {
-        //            DataTable dt = dBConnection.ExecuteQueryForDataTable("Call \"Mail_BOSY&SUBJECT\"('SAP')");
-        //            string body = "", subject = "", ccMails = "";
-
-        //            foreach (DataRow row in dt.Rows)
-        //            {
-        //                body = row["Body"].ToString();
-        //                subject = row["Subject"].ToString();
-        //                if (dt.Columns.Contains("CCMail")) ccMails = row["CCMail"].ToString();
-        //            }
-        //             log.WriteToLogFile_Debug("SAP Mail Started", "Mail");
-        //            using (MailMessage mail = new MailMessage())
-        //            {
-        //                string frommail = ConfigurationManager.AppSettings["MAILID"];
-        //                string username = ConfigurationManager.AppSettings["SMTPUSER"];
-        //                string password = ConfigurationManager.AppSettings["SMTPPWD"];
-        //                string server = ConfigurationManager.AppSettings["SMTPSERVER"];
-        //                int port = Convert.ToInt32(ConfigurationManager.AppSettings["SMTPPORT"]);
-
-        //                mail.From = new MailAddress(frommail);
-        //                 log.WriteToLogFile_Debug("To Mail :" + toMail, "Mail");
-        //                 log.WriteToLogFile_Debug("Agent Mail :" + agentMail, "Mail");
-        //                 log.WriteToLogFile_Debug("CC Mail :" + ccMails, "Mail");
-        //                mail.To.Add(toMail);
-        //                mail.To.Add(agentMail);
-        //                if (!string.IsNullOrWhiteSpace(ccMails))
-        //                {
-        //                    foreach (var cc in ccMails.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
-        //                        mail.CC.Add(cc.Trim());
-        //                }
-
-        //                mail.Subject = subject;
-        //                body = body.Replace("{Vendor Name}", data1["Trade Name"].ToString());
-        //                body = body.Replace("{Vendor Code}", data1["Code"].ToString());
-        //                mail.Body = body;
-        //                mail.IsBodyHtml = true;
-
-        //                using (MemoryStream ms = new MemoryStream(pdfBytes))
-        //                {
-        //                    mail.Attachments.Add(new System.Net.Mail.Attachment(ms, "VendorRegistrationForm.pdf", "application/pdf"));
-
-        //                    using (SmtpClient smtp = new SmtpClient(server, port))
-        //                    {
-        //                        smtp.Credentials = new System.Net.NetworkCredential(username, password);
-        //                        smtp.EnableSsl = true;
-        //                         log.WriteToLogFile_Debug("Mail sending", "Mail");
-        //                        smtp.Send(mail);
-        //                         log.WriteToLogFile_Debug("Mail Ended", "Mail");
-        //                    }
-        //                }
-        //            }
-
-        //            ScriptManager.RegisterStartupScript(this, GetType(), "mailSuccess", "alert('Mail sent successfully!');", true);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //             log.WriteToLogFile_Debug("Error while sending mail : " + ex.Message, "Mail");
-        //            ScriptManager.RegisterStartupScript(this, GetType(), "mailError", $"alert('Error sending mail: {ex.Message}');", true);
-        //        }
-        //    }
-        //}
-
-
+      
         public string JsonStringToDataTable(string jsonString, string strFun)
         {
             try
@@ -2283,56 +3189,6 @@ string userName)
             }
         }
 
-
-        //public string Login(string URL, string CompanyDB, string UserName, string Password, out string strRouteVal)
-        //{
-        //    string str_Response = string.Empty;
-        //    string ResponseMessage = string.Empty;
-
-        //    try
-        //    {
-        //        string strFun = "Login";
-        //        string sURL = URL + strFun;
-        //        string json = "{\"CompanyDB\": \"" + CompanyDB + "\", \"UserName\": \"" + UserName + "\", \"Password\": \"" + Password + "\"}";
-        //        var client = new RestClient(sURL);
-        //        ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
-        //        var request = new RestRequest("", Method.Post);
-        //        //request.AddHeader("cache-control", "no-cache");
-        //        request.AddHeader("content-type", "application/json");
-        //        request.AddParameter("application/json", json, ParameterType.RequestBody);
-        //        RestResponse response = client.Execute(request);
-        //        dynamic value = JsonConvert.DeserializeObject(response.Content);
-        //        value = (value == null) ? null : value.ToString();
-        //        if (value != null)
-        //        {
-        //            str_Response = JsonStringToDataTable(value, strFun);
-        //        }
-        //        CookieContainer cookie = new CookieContainer();
-        //        var cookie_1 = response.Cookies.FirstOrDefault();
-        //        var cookie_2 = response.Cookies.LastOrDefault();
-        //        CN1 = cookie_1.Name;
-        //        CN2 = cookie_2.Name;
-        //        CV1 = cookie_1.Value;
-        //        CV2 = cookie_2.Value;
-        //        strRouteVal = CV2;
-        //        if (str_Response == "Company Connected")
-        //        {
-        //            ResponseMessage = CV1;
-        //        }
-        //        else
-        //        {
-        //            ResponseMessage = str_Response;
-        //        }
-
-        //        //string sLogout = Logout(URL, CompanyDB, UserName, Password);
-        //        return ResponseMessage;
-        //    }
-        //    catch
-        //    {
-        //        throw;
-        //    }
-        //}
-
         public string Login(
      string URL,
      string CompanyDB,
@@ -2340,41 +3196,81 @@ string userName)
      string Password,
      out string strRouteVal)
         {
+            const string functionName = "Login";
             string str_Response = string.Empty;
             string ResponseMessage = string.Empty;
 
             strRouteVal = string.Empty;
-
+            log.WriteToLogFile_Debug(
+      $"[{functionName}] [START] - SAP Service Layer login process started.",
+      functionName
+  );
             try
             {
-                // =====================================================
-                // 1. Clean input
-                // =====================================================
-
+             
                 CompanyDB = CompanyDB?.Trim();
                 UserName = UserName?.Trim();
 
-                // Do NOT Trim() password unless you are 100% sure
-                // spaces are not part of the password.
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [REQUEST] - SAP login request received. " +
+            $"CompanyDB: {CompanyDB} | UserName: {UserName}",
+            functionName
+        );
+
 
                 if (string.IsNullOrWhiteSpace(URL))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - SAP Service Layer URL is empty.",
+                        functionName
+                    );
+
                     throw new Exception("SAP Service Layer URL is empty.");
+                }
 
                 if (string.IsNullOrWhiteSpace(CompanyDB))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - CompanyDB is empty.",
+                        functionName
+                    );
+
                     throw new Exception("CompanyDB is empty.");
+                }
 
                 if (string.IsNullOrWhiteSpace(UserName))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - UserName is empty.",
+                        functionName
+                    );
+
                     throw new Exception("UserName is empty.");
+                }
 
                 if (string.IsNullOrEmpty(Password))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - Password is empty.",
+                        functionName
+                    );
+
                     throw new Exception("Password is empty.");
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION] - SAP login input validation successful.",
+                    functionName
+                );
 
 
-                // =====================================================
-                // 2. Build SAP Login URL
-                // =====================================================
 
                 string sURL = $"{URL.TrimEnd('/')}/Login";
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [SAP_URL] - SAP login endpoint prepared. " +
+         $"URL: {sURL}",
+         functionName
+     );
 
 
                 Console.WriteLine("========================================");
@@ -2386,9 +3282,10 @@ string userName)
                 Console.WriteLine("========================================");
 
 
-                // =====================================================
-                // 3. RestSharp Client
-                // =====================================================
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [HTTP_CLIENT] - Initializing SAP Service Layer client.",
+        functionName
+    );
 
                 var options = new RestClientOptions(sURL)
                 {
@@ -2399,15 +3296,17 @@ string userName)
                 };
 
                 var client = new RestClient(options);
-
-
-                // =====================================================
-                // 4. Create POST request
-                // =====================================================
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [HTTP_CLIENT] - SAP Service Layer client initialized successfully.",
+          functionName
+      );
+               
                 var request = new RestRequest("", Method.Post);
 
-
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [HTTP_REQUEST] - SAP login POST request created with JSON headers.",
+         functionName
+     );
                 // =====================================================
                 // 5. Create SAP Login JSON
                 // =====================================================
@@ -2425,6 +3324,11 @@ string userName)
                 // =====================================================
 
                 string json = JsonConvert.SerializeObject(loginRequest);
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [REQUEST_BODY] - SAP login request body prepared. " +
+          $"CompanyDB: {CompanyDB} | UserName: {UserName} | PasswordProvided: {!string.IsNullOrEmpty(Password)}",
+          functionName
+      );
 
 
                 // Safe logging
@@ -2451,6 +3355,10 @@ string userName)
                 request.AddHeader("Accept", "application/json");
                 request.AddHeader("Content-Type", "application/json");
 
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [HTTP_REQUEST] - SAP login POST request created with JSON headers.",
+           functionName
+       );
 
                 // =====================================================
                 // 8. Add JSON body
@@ -2458,14 +3366,22 @@ string userName)
 
                 request.AddStringBody(json, ContentType.Json);
 
-
-                // =====================================================
-                // 9. Execute SAP Login
-                // =====================================================
+               
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [SAP_LOGIN] - Sending login request to SAP Service Layer.",
+          functionName
+      );
 
                 RestResponse response = client.Execute(request);
 
-
+                log.WriteToLogFile_Debug(
+       $"[{functionName}] [SAP_RESPONSE] - SAP login response received. " +
+       $"StatusCode: {response.StatusCode} | " +
+       $"IsSuccessful: {response.IsSuccessful} | " +
+       $"HasError: {!string.IsNullOrWhiteSpace(response.ErrorMessage)} | " +
+       $"ResponseLength: {response.Content?.Length ?? 0}",
+       functionName
+   );
                 // =====================================================
                 // 10. Log SAP Response
                 // =====================================================
@@ -2484,21 +3400,36 @@ string userName)
 
                 if (!response.IsSuccessful)
                 {
+                    log.WriteToLogFile_Debug(
+           $"[{functionName}] [SAP_RESPONSE_ERROR] - SAP Service Layer returned an error. " +
+           $"StatusCode: {response.StatusCode} | " +
+           $"Error: {response.ErrorMessage}",
+           functionName
+       );
                     throw new Exception(
                         $"SAP Login failed. " +
                         $"StatusCode: {response.StatusCode}, " +
                         $"Error: {response.ErrorMessage}, " +
                         $"Response: {response.Content}"
                     );
+                  
                 }
 
-
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [SAP_LOGIN] - SAP login HTTP request completed successfully.",
+         functionName
+     );
                 // =====================================================
                 // 12. Check response content
                 // =====================================================
 
                 if (string.IsNullOrWhiteSpace(response.Content))
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [SAP_RESPONSE] - SAP Login returned an empty response.",
+               functionName
+           );
+
                     throw new Exception(
                         "SAP Login returned an empty response."
                     );
@@ -2513,19 +3444,33 @@ string userName)
 
                 try
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [JSON] - Deserializing SAP login response.",
+               functionName
+           );
+
                     value = JsonConvert.DeserializeObject(
                         response.Content
                     );
                 }
                 catch (JsonException jsonEx)
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [JSON_ERROR] - SAP returned invalid JSON. " +
+               $"Message: {jsonEx.Message}",
+               functionName
+           );
+
                     throw new Exception(
                         "SAP returned invalid JSON. " +
                         "Response: " + response.Content,
                         jsonEx
                     );
                 }
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [JSON] - SAP login response deserialized successfully.",
+            functionName
+        );
 
                 // =====================================================
                 // 14. Convert SAP response
@@ -2539,8 +3484,17 @@ string userName)
                         jsonValue,
                         "Login"
                     );
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [RESPONSE_PROCESSING] - SAP login response processed successfully. " +
+               $"ResponseStatus: {str_Response}",
+               functionName
+           );
                 }
 
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [SESSION] - Checking SAP B1SESSION cookie.",
+          functionName
+      );
 
                 // =====================================================
                 // 15. Get B1SESSION cookie
@@ -2557,6 +3511,11 @@ string userName)
 
                 if (sessionCookie == null)
                 {
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [SESSION_FAILED] - SAP Login succeeded but B1SESSION cookie was not returned.",
+              functionName
+          );
+
                     throw new Exception(
                         "SAP Login succeeded but B1SESSION cookie was not returned."
                     );
@@ -2570,10 +3529,18 @@ string userName)
                 CN1 = sessionCookie.Name;
                 CV1 = sessionCookie.Value;
 
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [SESSION] - B1SESSION cookie received successfully.",
+        functionName
+    );
 
                 // =====================================================
                 // 17. Get ROUTEID cookie
                 // =====================================================
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [ROUTE] - Checking SAP ROUTEID cookie.",
+          functionName
+      );
 
                 var routeCookie = response.Cookies?
                     .FirstOrDefault(x =>
@@ -2594,12 +3561,20 @@ string userName)
                     CV2 = routeCookie.Value;
 
                     strRouteVal = routeCookie.Value;
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [ROUTE] - ROUTEID cookie received successfully.",
+                functionName
+            );
                 }
                 else
                 {
                     CN2 = string.Empty;
                     CV2 = string.Empty;
                     strRouteVal = string.Empty;
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [ROUTE] - ROUTEID cookie was not returned by SAP.",
+                functionName
+            );
                 }
 
 
@@ -2633,12 +3608,26 @@ string userName)
                 Console.WriteLine("Response           : " + ResponseMessage);
 
                 Console.WriteLine("========================================");
-
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [SUCCESS] - SAP login completed successfully. " +
+          $"B1SESSIONReceived: {!string.IsNullOrEmpty(CV1)} | " +
+          $"ROUTEIDReceived: {!string.IsNullOrEmpty(strRouteVal)} | " +
+          $"ResponseStatus: {str_Response}",
+          functionName
+      );
 
                 return ResponseMessage;
             }
             catch (Exception ex)
             {
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [EXCEPTION] - Error during SAP Service Layer login. " +
+           $"CompanyDB: {CompanyDB} | " +
+           $"UserName: {UserName} | " +
+           $"Message: {ex.Message} | " +
+           $"StackTrace: {ex.StackTrace}",
+           functionName
+       );
                 strRouteVal = string.Empty;
 
                 Console.WriteLine("========== SAP LOGIN ERROR ==========");
@@ -2646,6 +3635,13 @@ string userName)
                 Console.WriteLine("=====================================");
 
                 throw;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - SAP Service Layer login process ended.",
+                    functionName
+                );
             }
         }
         public string TransactionPosting(
@@ -2656,20 +3652,56 @@ string userName)
     string strRoutevalue,
     string strCompDB)
         {
+            const string functionName = "TransactionPosting";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - SAP transaction posting process started.",
+                functionName
+            );
             try
             {
-                // =====================================================
-                // 1. Validate input
-                // =====================================================
-
+                log.WriteToLogFile_Debug(
+              $"[{functionName}] [REQUEST] - Transaction request received. " +
+              $"TransactionType: {TransactionType} | " +
+              $"CompanyDB: {strCompDB} | " +
+              $"SessionProvided: {!string.IsNullOrWhiteSpace(str_SessionID)} | " +
+              $"RouteProvided: {!string.IsNullOrWhiteSpace(strRoutevalue)}",
+              functionName
+          );
                 if (string.IsNullOrWhiteSpace(URL))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - SAP Service Layer URL is empty.",
+                        functionName
+                    );
+
                     throw new Exception("SAP Service Layer URL is empty.");
+                }
 
                 if (string.IsNullOrWhiteSpace(MasterData))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - MasterData is empty.",
+                        functionName
+                    );
+
                     throw new Exception("MasterData is empty.");
+                }
 
                 if (string.IsNullOrWhiteSpace(str_SessionID))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - SAP Session ID is empty.",
+                        functionName
+                    );
+
                     throw new Exception("SAP Session ID is empty.");
+                }
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [VALIDATION] - Transaction input validation successful.",
+                    functionName
+                );
 
                 // Keep session ID in your existing variable
                 CV1 = str_SessionID;
@@ -2678,6 +3710,11 @@ string userName)
 
                 // Make sure URL does not end with /
                 string sURL = URL.TrimEnd('/');
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [SAP_URL] - SAP transaction endpoint prepared. " +
+         $"URL: {sURL}",
+         functionName
+     );
 
                 Console.WriteLine("========================================");
                 Console.WriteLine("SAP TRANSACTION POSTING");
@@ -2695,6 +3732,11 @@ string userName)
                 // 2. RestSharp client
                 // =====================================================
 
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [HTTP_CLIENT] - Initializing SAP Service Layer client.",
+                    functionName
+                );
+
                 var options = new RestClientOptions(sURL)
                 {
                     // DEVELOPMENT / INTERNAL TESTING ONLY
@@ -2704,7 +3746,10 @@ string userName)
                 };
 
                 var client = new RestClient(options);
-
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [HTTP_CLIENT] - SAP Service Layer client initialized successfully.",
+           functionName
+       );
 
                 // =====================================================
                 // 3. Create POST request
@@ -2719,6 +3764,10 @@ string userName)
 
                 request.AddHeader("Accept", "application/json");
                 request.AddHeader("Content-Type", "application/json");
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [HTTP_REQUEST] - SAP POST request created with JSON headers.",
+          functionName
+      );
 
 
                 // =====================================================
@@ -2729,6 +3778,10 @@ string userName)
                     "B1SESSION",
                     str_SessionID
                 );
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SESSION] - B1SESSION cookie added to SAP request.",
+           functionName
+       );
 
                 if (!string.IsNullOrWhiteSpace(strRoutevalue))
                 {
@@ -2736,6 +3789,10 @@ string userName)
                         "ROUTEID",
                         strRoutevalue
                     );
+                    log.WriteToLogFile_Debug(
+                $"[{functionName}] [ROUTE] - ROUTEID cookie added to SAP request.",
+                functionName
+            );
                 }
 
 
@@ -2748,10 +3805,21 @@ string userName)
                     ContentType.Json
                 );
 
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST_BODY] - SAP transaction JSON body added successfully. " +
+                    $"PayloadLength: {MasterData?.Length ?? 0}",
+                    functionName
+                );
+
 
                 // =====================================================
                 // 7. Execute request
                 // =====================================================
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SAP_POST] - Sending SAP transaction request. " +
+           $"TransactionType: {TransactionType}",
+           functionName
+       );
 
                 RestResponse response = client.Execute(request);
 
@@ -2771,9 +3839,36 @@ string userName)
                 // =====================================================
                 // 9. Check HTTP error
                 // =====================================================
+                log.WriteToLogFile_Debug(
+        $"[{functionName}] [SAP_RESPONSE] - SAP transaction response received. " +
+        $"StatusCode: {response.StatusCode} | " +
+        $"IsSuccessful: {response.IsSuccessful} | " +
+        $"HasError: {!string.IsNullOrWhiteSpace(response.ErrorMessage)} | " +
+        $"ResponseLength: {response.Content?.Length ?? 0}",
+        functionName
+    );
+
+
+                if (!string.IsNullOrWhiteSpace(response.ErrorMessage))
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [SAP_RESPONSE_ERROR] - SAP Service Layer returned an HTTP/client error. " +
+                        $"StatusCode: {response.StatusCode} | " +
+                        $"Error: {response.ErrorMessage}",
+                        functionName
+                    );
+                }
 
                 if (!response.IsSuccessful)
                 {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [SAP_POST_FAILED] - SAP transaction request failed. " +
+                        $"TransactionType: {TransactionType} | " +
+                        $"StatusCode: {response.StatusCode} | " +
+                        $"Error: {response.ErrorMessage}",
+                        functionName
+                    );
+
                     throw new Exception(
                         $"SAP Transaction failed. " +
                         $"StatusCode: {response.StatusCode}, " +
@@ -2782,6 +3877,10 @@ string userName)
                     );
                 }
 
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [SAP_POST] - SAP transaction HTTP request completed successfully.",
+                    functionName
+                );
 
                 // =====================================================
                 // 10. Check response content
@@ -2789,6 +3888,10 @@ string userName)
 
                 if (string.IsNullOrWhiteSpace(response.Content))
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [SAP_RESPONSE] - SAP returned an empty response.",
+               functionName
+           );
                     throw new Exception(
                         "SAP returned an empty response."
                     );
@@ -2803,16 +3906,31 @@ string userName)
 
                 try
                 {
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [JSON] - Parsing SAP transaction response.",
+              functionName
+          );
+
                     jsonResponse = JObject.Parse(response.Content);
                 }
                 catch (JsonException jsonEx)
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [JSON_ERROR] - SAP returned invalid JSON. " +
+               $"Message: {jsonEx.Message}",
+               functionName
+           );
+
                     throw new Exception(
                         "SAP returned invalid JSON. " +
                         "Response: " + response.Content,
                         jsonEx
                     );
                 }
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [JSON] - SAP transaction response parsed successfully.",
+          functionName
+      );
 
 
                 // =====================================================
@@ -2828,6 +3946,12 @@ string userName)
                     {
                         sapError = jsonResponse["error"]?.ToString();
                     }
+                    log.WriteToLogFile_Debug(
+              $"[{functionName}] [SAP_ERROR] - SAP returned a transaction error. " +
+              $"TransactionType: {TransactionType} | " +
+              $"Error: {sapError}",
+              functionName
+          );
 
                     throw new Exception(
                         "SAP Transaction Error: " + sapError
@@ -2838,13 +3962,21 @@ string userName)
                 // =====================================================
                 // 13. Get AbsoluteEntry
                 // =====================================================
-
+                log.WriteToLogFile_Debug(
+      $"[{functionName}] [RESPONSE_PROCESSING] - Checking SAP response for AbsoluteEntry.",
+      functionName
+  );
                 JToken absoluteEntryToken =
                     jsonResponse["AbsoluteEntry"];
 
 
                 if (absoluteEntryToken == null)
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [RESPONSE_VALIDATION_FAILED] - " +
+               $"SAP transaction succeeded but AbsoluteEntry was not found.",
+               functionName
+           );
                     throw new Exception(
                         "SAP transaction succeeded but AbsoluteEntry " +
                         "was not found in the response. " +
@@ -2861,6 +3993,12 @@ string userName)
                         absoluteEntryToken.ToString(),
                         out int absoluteEntry))
                 {
+                    log.WriteToLogFile_Debug(
+               $"[{functionName}] [RESPONSE_VALIDATION_FAILED] - " +
+               $"Invalid AbsoluteEntry returned by SAP. " +
+               $"Value: {absoluteEntryToken}",
+               functionName
+           );
                     throw new Exception(
                         "Invalid AbsoluteEntry returned by SAP: " +
                         absoluteEntryToken
@@ -2877,7 +4015,12 @@ string userName)
                 Console.WriteLine("AbsoluteEntry    : " + absoluteEntry);
                 Console.WriteLine("=============================================");
 
-
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SUCCESS] - SAP transaction posted successfully. " +
+           $"TransactionType: {TransactionType} | " +
+           $"AbsoluteEntry: {absoluteEntry}",
+           functionName
+       );
                 return absoluteEntry.ToString();
             }
             catch (Exception ex)
@@ -2886,11 +4029,25 @@ string userName)
                 Console.WriteLine(ex.ToString());
                 Console.WriteLine("============================================");
 
-                // You can either throw the exception
-                // so the controller receives the actual error,
-                // or return the error string.
+              log.WriteToLogFile_Debug(
+
+           $"[{functionName}] [EXCEPTION] - Error during SAP transaction posting. " +
+           $"TransactionType: {TransactionType} | " +
+           $"CompanyDB: {strCompDB} | " +
+           $"Message: {ex.Message} | " +
+           $"StackTrace: {ex.StackTrace}",
+           functionName
+       );
 
                 throw;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - SAP transaction posting process ended. " +
+                    $"TransactionType: {TransactionType}",
+                    functionName
+                );
             }
         }
 
@@ -2904,17 +4061,67 @@ string userName)
             string GstNumber
             )
         {
+            const string functionName = "Approved";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor approval process started.",
+                functionName
+            );
 
             try
             {
                 string Department = string.Empty;
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [REQUEST] - Approval request received. " +
+           $"UserName: {UserName} | GST Number: {GstNumber}",
+           functionName
+       );
 
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Fetching user approval level.",
+          functionName
+      );
 
                 string level = GetSingleValue($@"Select ""Level"" from ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}' or  ""User_Mail_Id"" = '{UserName}'");
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - User approval level retrieved. " +
+          $"Level: {level}",
+          functionName
+      );
+
+
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [DATABASE] - Fetching user department.",
+            functionName
+        );
+
                 Department = GetSingleValue($@"Select ""Department"" from ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}' or  ""User_Mail_Id"" = '{UserName}'");
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - User department retrieved. " +
+           $"Department: {Department}",
+           functionName
+       );
+
+
                 string IsDepartment = GetSingleValue($@"Select ""ApprovedDepartment"" from  ""{sDBName}"".""ApprovalCheck"" where ""ApprovedDepartment""='{Department}'");
+
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Checking ApprovalCheck for department.",
+           functionName
+       );
+                bool departmentExists =
+          !string.IsNullOrWhiteSpace(IsDepartment);
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Approval department check completed. " +
+                    $"DepartmentExists: {departmentExists}",
+                    functionName
+                );
+
+
                 if (IsDepartment != "" && IsDepartment != null)
                 {
+
                     ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}','{Department} ','1','{GstNumber}','{level} ','{Remarks}')");
                 }
                 else
@@ -2922,11 +4129,34 @@ string userName)
                     ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}','{Department} ','1','{GstNumber}','{level} ','{Remarks}')");
                 }
 
+
+
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [DATABASE] - Executing IsApproved procedure.",
+                    functionName
+                );
+
                 ExecuteNonQuery($@"call ""{sDBName}"".""IsApproved""('{UserName}','{Department}','{GstNumber}')");
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - IsApproved procedure executed successfully.",
+           functionName
+       );
 
-
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [DATABASE] - Inserting approval trace.",
+            functionName
+        );
                 ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalTrace""  (""User"",""GstNo"",""ApproveStatus"",""Level"") values('{UserName}','{GstNumber}','Y','{level}')");
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Approval trace inserted successfully.",
+           functionName
+       );
+
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SUCCESS] - Vendor approval completed successfully. " +
+           $"UserName: {UserName} | Level: {level}",
+           functionName
+       );
 
                 return new ApiResponse
                 {
@@ -2938,7 +4168,14 @@ string userName)
             }
             catch (Exception ex)
             {
-
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [EXCEPTION] - Error during vendor approval. " +
+           $"UserName: {UserName} | " +
+           $"GST Number: {GstNumber} | " +
+           $"Message: {ex.Message} | " +
+           $"StackTrace: {ex.StackTrace}",
+           functionName
+       );
 
                 return new ApiResponse
                 {
@@ -2951,7 +4188,10 @@ string userName)
             finally
             {
 
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [END] - Vendor approval process ended.",
+            functionName
+        );
 
             }
 
@@ -2965,20 +4205,73 @@ string userName)
             string Status
             )
         {
+            const string functionName = "Reject";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor rejection process started.",
+                functionName
+            );
             try
             {
-
-
-                string level = GetSingleValue($@"Select ""Level"" from  ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}' or  ""User_Mail_Id"" = '{UserName}'");
                 string Department = string.Empty;
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [REQUEST] - Rejection request received. " +
+           $"UserName: {UserName} | GST Number: {GstNumber} | Status: {Status}",
+           functionName
+       );
+
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Fetching user approval level.",
+         functionName
+     );
+                string level = GetSingleValue($@"Select ""Level"" from  ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}' or  ""User_Mail_Id"" = '{UserName}'");
+                log.WriteToLogFile_Debug(
+              $"[{functionName}] [DATABASE] - User approval level retrieved. " +
+              $"Level: {level}",
+              functionName
+          );
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Fetching user department.",
+           functionName
+       );
 
                 Department = GetSingleValue($@"Select ""Department"" from ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}' or  ""User_Mail_Id"" = '{UserName}'");
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - User department retrieved. " +
+         $"Department: {Department}",
+         functionName
+     );
+
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Updating vendor rejection details in TEC_OLED.",
+          functionName
+      );
+
 
                 string query = $@"UPDATE ""{sDBName}"".""TEC_OLED"" SET ""Approval""='N', ""Draft""='Y',""RejectionStatus""='Y',""DraftApproved""='N',""RejectionReason""='{Reason}', ""RejectedUser""='{UserName}',""ApprovedDepartment"" = '{Department}' WHERE ""GstNo""='{GstNumber}'";
 
                 ExecuteNonQuery(query);
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Vendor rejection details updated successfully.",
+          functionName
+      );
+
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [DATABASE] - Inserting rejection trace.",
+         functionName
+     );
 
                 ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalTrace""  (""User"",""GstNo"",""ApproveStatus"",""RjectedReason"",""Level"",""ReApplySts"") values('{UserName}','{GstNumber}','N','{Reason}','{level}','{Status}')");
+                log.WriteToLogFile_Debug(
+          $"[{functionName}] [DATABASE] - Rejection trace inserted successfully.",
+          functionName
+      );
+
+
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Fetching vendor recipient email.",
+           functionName
+       );
 
                 string toMail = GetSingleValue($@"Select ""EmailId"" from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{GstNumber}'");
 
@@ -2990,7 +4283,19 @@ string userName)
                     mailTemplate = string.Empty;
 
                 }
+                bool mailAvailable = !string.IsNullOrWhiteSpace(toMail);
 
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [MAIL] - Recipient email lookup completed. " +
+                    $"EmailAvailable: {mailAvailable}",
+                    functionName
+                );
+
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [SUCCESS] - Vendor rejection completed successfully. " +
+         $"UserName: {UserName} | Level: {level}",
+         functionName
+     );
 
                 return new ApiResponse
                 {
@@ -3003,6 +4308,15 @@ string userName)
             catch (Exception ex)
             {
 
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [EXCEPTION] - Error during vendor rejection. " +
+         $"UserName: {UserName} | " +
+         $"GST Number: {GstNumber} | " +
+         $"Status: {Status} | " +
+         $"Message: {ex.Message} | " +
+         $"StackTrace: {ex.StackTrace}",
+         functionName
+     );
 
                 return new ApiResponse
                 {
@@ -3014,10 +4328,139 @@ string userName)
             }
             finally
             {
-
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [END] - Vendor rejection process ended.",
+            functionName
+        );
             }
 
         }
+
+
+        public async Task<bool> DraftApproved(
+     string Draft,
+     string GstNumber,
+     string UserName)
+        {
+            const string functionName = "DraftApproved";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Draft approval validation process started.",
+                functionName
+            );
+
+            try
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [REQUEST] - Draft approval request received. " +
+                    $"Draft: {Draft} | GST Provided: {!string.IsNullOrWhiteSpace(GstNumber)} | " +
+                    $"UserName: {UserName}",
+                    functionName
+                );
+
+                if (GstNumber == null)
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION] - GST number is null. Proceeding with draft approval validation.",
+                        functionName
+                    );
+
+                    if (Draft == "Draft")
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Draft status confirmed.",
+                            functionName
+                        );
+
+                        string departmentQuery =
+                            $@"Select ""Departmen"" 
+                       from ""{sDBName}"".""TEC_OUSR"" 
+                       where ""User_Name""='{UserName}' 
+                       or ""User_Mail_Id""='{UserName}'";
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - Fetching department for user.",
+                            functionName
+                        );
+
+                        string Department = GetSingleValue(departmentQuery);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - Department retrieved successfully. " +
+                            $"Department: {Department}",
+                            functionName
+                        );
+
+                        string approvalQuery =
+                            $@"Call ""IsApprovalReq""('{UserName}','{Department}')";
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - Checking approval requirement.",
+                            functionName
+                        );
+
+                        string IsApprovalReq = GetSingleValue(approvalQuery);
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [DATABASE] - Approval requirement check completed. " +
+                            $"IsApprovalReq: {IsApprovalReq}",
+                            functionName
+                        );
+
+                        if (IsApprovalReq == "Y")
+                        {
+                            log.WriteToLogFile_Debug(
+                                $"[{functionName}] [SUCCESS] - Draft requires approval. Approval validation passed.",
+                                functionName
+                            );
+
+                            return true;
+                        }
+
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [FLOW] - Draft does not require approval.",
+                            functionName
+                        );
+                    }
+                    else
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"[{functionName}] [VALIDATION_FAILED] - Draft value is not 'Draft'.",
+                            functionName
+                        );
+                    }
+                }
+                else
+                {
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [VALIDATION_FAILED] - GST number is already provided. " +
+                        $"Draft approval validation skipped.",
+                        functionName
+                    );
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [EXCEPTION] - Error while validating draft approval. " +
+                    $"Draft: {Draft} | UserName: {UserName} | " +
+                    $"Message: {ex.Message} | StackTrace: {ex.StackTrace}",
+                    functionName
+                );
+
+                return false;
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+                    $"[{functionName}] [END] - Draft approval validation process ended.",
+                    functionName
+                );
+            }
+        }
+
     }
 
 }
