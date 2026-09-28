@@ -280,8 +280,8 @@ namespace VRF_API.Services
             if (request.FormData == null)
                 throw new Exception("Vendor form data is required.");
 
-            if (request.IsExistingVendor && !request.OtpValid)
-                throw new Exception("Kindly Verify Mobile Number.");
+            //if (request.IsExistingVendor && !request.OtpValid)
+            //    throw new Exception("Kindly Verify Mobile Number.");
 
             var model = request.FormData;
 
@@ -314,7 +314,7 @@ namespace VRF_API.Services
                 throw new Exception("Billing Address and Country are required.");
 
             if (model.BankDetails == null ||
-                string.IsNullOrWhiteSpace(model.BankDetails.BankName) ||
+                
                 string.IsNullOrWhiteSpace(model.BankDetails.AccountNameHolder) ||
                 string.IsNullOrWhiteSpace(model.BankDetails.AccountNumber) ||
                 string.IsNullOrWhiteSpace(model.BankDetails.IfscCode))
@@ -2888,7 +2888,7 @@ namespace VRF_API.Services
             command.Parameters.AddWithValue("@GstNo", model.GstNumber ?? "");
             command.Parameters.AddWithValue("@DeclarationName", model.DeclarationName ?? "");
             command.Parameters.AddWithValue("@DeclarationDesignation", model.DeclarationDesignation ?? "");
-            command.Parameters.AddWithValue("@Draft", 'N');
+            command.Parameters.AddWithValue("@Draft", 'Y');
             command.Parameters.AddWithValue("@AppliedDate", DateTime.Now.ToString("yyyy-MM-dd"));
             command.Parameters.AddWithValue("@PartnerType", model.PartnerType ?? "");
             command.Parameters.AddWithValue("@PanNo", model.PanNumber ?? "");
@@ -4254,7 +4254,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@Draft",
-                "Y"
+                ""
             );
 
             command.Parameters.AddWithValue(
@@ -4443,17 +4443,29 @@ namespace VRF_API.Services
             return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Loaded the intial values", response);
 
         }
-        public async Task<ApiResponse> UploadKycFile(IFormFile file, string documentType, int rowIndex)
+        public async Task<ApiResponse> UploadKycFile(
+         IFormFile file,
+         string documentType,
+         int rowIndex)
         {
             try
             {
+                // =========================================================
+                // FILE VALIDATION
+                // =========================================================
+
                 if (file == null || file.Length == 0)
                 {
-                    return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure,
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
                         "File is required",
                         null
                     );
                 }
+
+                // =========================================================
+                // DOCUMENT TYPE VALIDATION
+                // =========================================================
 
                 if (string.IsNullOrWhiteSpace(documentType))
                 {
@@ -4474,7 +4486,9 @@ namespace VRF_API.Services
         };
 
                 if (!allowedDocumentTypes.Any(x =>
-                    x.Equals(documentType, StringComparison.OrdinalIgnoreCase)))
+                    x.Equals(
+                        documentType,
+                        StringComparison.OrdinalIgnoreCase)))
                 {
                     return ApiResponseUtility.GenerateApiResponse(
                         ApiStatusEnum.Failure,
@@ -4482,6 +4496,10 @@ namespace VRF_API.Services
                         null
                     );
                 }
+
+                // =========================================================
+                // PERFORMA INVOICE ROW VALIDATION
+                // =========================================================
 
                 if (documentType.Equals(
                         "Performa Invoice",
@@ -4495,30 +4513,63 @@ namespace VRF_API.Services
                     );
                 }
 
-                string folderPath = _configuration["Folder:Path"]; if (string.IsNullOrWhiteSpace(folderPath)) { throw new Exception("Folder path is not configured in appsettings.json."); }
-                if (!Directory.Exists(folderPath)) { Directory.CreateDirectory(folderPath); }
+                // =========================================================
+                // GET UPLOAD FOLDER
+                // =========================================================
 
-                string originalFileName = Path.GetFileName(file.FileName);
+                string folderPath =
+                    _configuration["Folder:Path"];
+
+                if (string.IsNullOrWhiteSpace(folderPath))
+                {
+                    throw new Exception(
+                        "Folder path is not configured in appsettings.json.");
+                }
+
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                // =========================================================
+                // CREATE UNIQUE FILE NAME
+                // =========================================================
+
+                string originalFileName =
+                    Path.GetFileName(file.FileName);
+
                 string fileNameWithoutExtension =
-                    Path.GetFileNameWithoutExtension(originalFileName);
-                string extension = Path.GetExtension(originalFileName);
+                    Path.GetFileNameWithoutExtension(
+                        originalFileName);
+
+                string extension =
+                    Path.GetExtension(originalFileName);
 
                 const string characters =
                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-                string uniqueNumber = new string(
-                    Enumerable.Range(0, 4)
-                        .Select(x => characters[Random.Shared.Next(characters.Length)])
-                        .ToArray()
-                );
+                string uniqueNumber =
+                    new string(
+                        Enumerable.Range(0, 4)
+                            .Select(x =>
+                                characters[
+                                    Random.Shared.Next(
+                                        characters.Length)])
+                            .ToArray()
+                    );
 
                 string fileName =
                     $"{fileNameWithoutExtension}_{uniqueNumber}{extension}";
 
-                string filePath = Path.Combine(
-                    folderPath,
-                    fileName
-                );
+                string filePath =
+                    Path.Combine(
+                        folderPath,
+                        fileName
+                    );
+
+                // =========================================================
+                // SAVE FILE
+                // =========================================================
 
                 using (var stream = new FileStream(
                     filePath,
@@ -4527,14 +4578,9 @@ namespace VRF_API.Services
                     await file.CopyToAsync(stream);
                 }
 
-                //string rowKeySuffix = "";
-
-                //if (documentType.Equals(
-                //        "Performa Invoice",
-                //        StringComparison.OrdinalIgnoreCase))
-                //{
-                //    rowKeySuffix = "_" + rowIndex;
-                //}
+                // =========================================================
+                // STORE FILE INFORMATION IN SESSION
+                // =========================================================
 
                 string sessionPathKey =
                     $"Path_{documentType}";
@@ -4552,23 +4598,187 @@ namespace VRF_API.Services
                     fileName
                 );
 
-                var documentResult = await APIPosting(
-                    documentType,
-                    filePath
-                );
+                // =========================================================
+                // TRY TO PARSE DOCUMENT
+                // =========================================================
+
+                var documentResult =
+                    await APIPosting(
+                        documentType,
+                        filePath
+                    );
+
+                // =========================================================
+                // PARSING FAILED
+                // =========================================================
+                // The physical file has already been uploaded successfully.
+                // Therefore, do NOT return Failure just because parsing failed.
+                // Return the file information only.
 
                 if (documentResult == null)
                 {
+                    log.WriteToLogFile_Debug(
+                        $"[UploadKycFile] Parsing failed for document: {fileName}. " +
+                        "File uploaded successfully without extracted details.",
+                        "UploadKycFile"
+                    );
+
+                    var uploadResult =
+                        new KycUploadResponse
+                        {
+                            DocumentType = documentType,
+                            RowIndex = rowIndex,
+                            FileName = fileName,
+                            FilePath = filePath
+                        };
+
                     return ApiResponseUtility.GenerateApiResponse(
-                        ApiStatusEnum.Failure,
-                        "Unable to process the uploaded document",
-                        null
+                        ApiStatusEnum.Success,
+                        "File uploaded successfully. Details could not be extracted.",
+                        uploadResult
                     );
                 }
 
-                documentResult.DocumentType = documentType;
-                documentResult.RowIndex = rowIndex;
-                documentResult.FileName = fileName;
+                // =========================================================
+                // PARSING SUCCESSFUL
+                // =========================================================
+
+                documentResult.DocumentType =
+                    documentType;
+
+                documentResult.RowIndex =
+                    rowIndex;
+
+                documentResult.FileName =
+                    fileName;
+
+                documentResult.FilePath =
+                    filePath;
+
+                // =========================================================
+                // GST CERTIFICATE VALIDATION
+                // =========================================================
+
+                if (documentType.Equals(
+                        "GST Certificate",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    // -----------------------------------------------------
+                    // Make sure GST details were actually extracted
+                    // -----------------------------------------------------
+
+                    string gstNumber =
+                        documentResult.GstDetails?.GstNumber ?? "";
+
+                    if (!string.IsNullOrWhiteSpace(gstNumber))
+                    {
+                        // -------------------------------------------------
+                        // CHECK WHETHER GST ALREADY EXISTS
+                        // -------------------------------------------------
+
+                        string GstValid =
+                            db.GetSingleValue(
+                                $@"Select ""GstNo""
+                           from ""{sDBName}"".""TEC_OLED""
+                           where ""GstNo""='" +
+                                   gstNumber +
+                                   "'"
+                            );
+
+                        if (!string.IsNullOrEmpty(GstValid))
+                        {
+                            // ---------------------------------------------
+                            // GET DRAFT STATUS
+                            // ---------------------------------------------
+
+                            string draftCheck =
+                                db.GetSingleValue(
+                                    $@"Select ifnull(""Draft"",'N')
+                               from ""{sDBName}"".""TEC_OLED""
+                               where ""GstNo""='" +
+                                       gstNumber +
+                                       "'"
+                                );
+
+                            // ---------------------------------------------
+                            // CHECK GST SAVED
+                            // ---------------------------------------------
+
+                            string IsGstSaved =
+                                db.GetSingleValue(
+                                    $@"Select ""GstNo""
+                               from ""{sDBName}"".""TEC_OLED""
+                               where ""GstNo""='" +
+                                       gstNumber +
+                                       "'"
+                                );
+
+                            if (!string.IsNullOrEmpty(draftCheck))
+                            {
+                                string ISFromDraft =
+                                    string.Empty;
+
+                                var isDraftValue =
+                                    _sessionManager.Get("IsDraft");
+
+                                if (isDraftValue != null &&
+                                    !string.IsNullOrEmpty(
+                                        isDraftValue
+                                            .ToString()
+                                            .Trim()))
+                                {
+                                    ISFromDraft =
+                                        isDraftValue
+                                            .ToString()
+                                            .Trim();
+                                }
+
+                                // -----------------------------------------
+                                // GST ALREADY IN DRAFT
+                                // -----------------------------------------
+
+                                if (draftCheck == "Y" &&
+                                    ISFromDraft != "Y")
+                                {
+                                    log.WriteToLogFile_Debug(
+                                        "[VendorCreation] [btnNext_Click] " +
+                                        "[VALIDATION_FAILED] - Page 2: GST: "
+                                        + gstNumber
+                                        + " is already in draft",
+                                        "btnNext_Click"
+                                    );
+
+                                    return ApiResponseUtility
+                                        .GenerateApiResponse(
+                                            ApiStatusEnum.Failure,
+                                            "Your Gst Number is Already in draft",
+                                            null
+                                        );
+                                }
+
+                                // -----------------------------------------
+                                // GST ALREADY SUBMITTED
+                                // -----------------------------------------
+
+                                else if (
+                                    draftCheck == "N" &&
+                                    !string.IsNullOrEmpty(IsGstSaved))
+                                {
+                                    return ApiResponseUtility
+                                        .GenerateApiResponse(
+                                            ApiStatusEnum.Failure,
+                                            "Your GST Number is Already Submitted",
+                                            null
+                                        );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =========================================================
+                // FINAL SUCCESS
+                // =========================================================
 
                 return ApiResponseUtility.GenerateApiResponse(
                     ApiStatusEnum.Success,
@@ -5605,11 +5815,11 @@ namespace VRF_API.Services
             // ---------------------------------------------------------
 
             string gst = db.GetSingleValue(
-                $@"SELECT ""GstNo""
-   FROM {sDBName}.""TEC_OLED""
-   WHERE ""GstNo"" = '{gstNumber}'
-   AND ""Draft"" = 'Y'"
-            );
+    $@"SELECT ""GstNo""
+       FROM {sDBName}.""TEC_OLED""
+       WHERE ""GstNo"" = '{gstNumber}'
+       AND (""Draft"" = 'Y' OR ""Draft"" = '')"
+);
 
             // ---------------------------------------------------------
             // GET ID

@@ -60,7 +60,7 @@ namespace VRF_API.Services
                 _sessionManager.Set("IsDraft", "Y");
                 string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '" + _sessionManager.Get("GSTNumber").ToString() + "'";
                 string isExist = db.GetSingleValue(query);
-                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '" + _sessionManager.Get("GSTNumber").ToString() + "' and ifnull(\"Draft\",'N')='N'";
+                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '" + _sessionManager.Get("GSTNumber").ToString() + "' and ifnull(\"Draft\",'N')='Y'";
                 string isExist1 = db.GetSingleValue(query1);
                 string ReApplySts = db.GetSingleValue($@"Select 'N' from ""{sDBName}"".""ApprovalTrace"" where  ""GstNo""='" + _sessionManager.Get("GSTNumber").ToString() + "' and \"ReApplySts\"='No' ");
                 log.WriteToLogFile_Debug($"Checks: isExist=" + isExist + ", isExist1=" + isExist1 + ", ReApplySts=" + ReApplySts, functionName);
