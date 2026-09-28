@@ -58,6 +58,10 @@ namespace VRF_API.Services
      string Draft,
      string GstNumber,
      string UserName);
+        Task<ApiResponse> DraftApproved1(
+          string GstNumber
+
+          );
     }
 
 
@@ -4358,14 +4362,14 @@ namespace VRF_API.Services
                     functionName
                 );
 
-                if (GstNumber == null)
+                if (GstNumber != null)
                 {
                     log.WriteToLogFile_Debug(
                         $"[{functionName}] [VALIDATION] - GST number is null. Proceeding with draft approval validation.",
                         functionName
                     );
 
-                    if (Draft == "Draft")
+                    if (Draft == "draft")
                     {
                         log.WriteToLogFile_Debug(
                             $"[{functionName}] [FLOW] - Draft status confirmed.",
@@ -4373,7 +4377,7 @@ namespace VRF_API.Services
                         );
 
                         string departmentQuery =
-                            $@"Select ""Departmen"" 
+                            $@"Select ""Department"" 
                        from ""{sDBName}"".""TEC_OUSR"" 
                        where ""User_Name""='{UserName}' 
                        or ""User_Mail_Id""='{UserName}'";
@@ -4392,7 +4396,7 @@ namespace VRF_API.Services
                         );
 
                         string approvalQuery =
-                            $@"Call ""IsApprovalReq""('{UserName}','{Department}')";
+                            $@"Call ""{sDBName}"".""IsApprovalReq""('{UserName}','{Department}')";
 
                         log.WriteToLogFile_Debug(
                             $"[{functionName}] [DATABASE] - Checking approval requirement.",
@@ -4460,6 +4464,54 @@ namespace VRF_API.Services
                 );
             }
         }
+
+
+        public async Task<ApiResponse> DraftApproved1(
+          string GstNumber
+       
+          )
+        {
+            const string functionName = "DraftApproved1";
+
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Vendor rejection process started.",
+                functionName
+            );
+            try
+            {
+               
+      ExecuteNonQuery($@"Update ""{sDBName}"".""TEC_OLED"" set ""MerApproved""='Y',""DraftApproved""='Y' where ""GstNo""='{GstNumber}'");
+                return new ApiResponse
+                {
+                    Status = ApiStatusEnum.Success,
+                    Message = "Approved Successfull",
+                    ErrorCode = ErrorCodeEnum.Success,
+                    Data = null
+                };
+            }
+            catch (Exception ex)
+            {
+
+            
+
+                return new ApiResponse
+                {
+                    Status = ApiStatusEnum.Failure,
+                    Message = ex.Message,
+                    Data = null
+                };
+
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [END] - Vendor rejection process ended.",
+            functionName
+        );
+            }
+
+        }
+
 
     }
 

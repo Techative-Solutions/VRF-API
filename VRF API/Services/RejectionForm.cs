@@ -24,13 +24,14 @@ namespace VRF_API.Services
         private readonly DbConnection db;
         private readonly string sConstr;
         private readonly Repository.Log log;
-        public RejectionForm(IConfiguration configuration, OdbcConnection connection, DbConnection _db)
+        public RejectionForm(IConfiguration configuration, OdbcConnection connection, DbConnection _db, Repository.Log _log)
         {
             _configuration = configuration;
             _connection = connection;
             sDBName = _configuration["HanaSettings:DBName"];
             sConstr = _configuration["ConnectionStrings:HanaOdbc"];
             db = _db;
+            log = _log;
         }
 
         public async Task<List<RejectedResponse>> RejectedDetails(string UserNme)

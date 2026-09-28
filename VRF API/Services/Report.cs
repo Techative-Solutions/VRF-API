@@ -26,13 +26,14 @@ namespace VRF_API.Services
         private readonly DbConnection db;
         private readonly string sConstr;
 
-        public Report(IConfiguration configuration, OdbcConnection connection, DbConnection _db)
+        public Report(IConfiguration configuration, OdbcConnection connection, DbConnection _db,Log _log)
         {
             _configuration = configuration;
             _connection = connection;
             sDBName = _configuration["HanaSettings:DBName"];
             sConstr = _configuration["ConnectionStrings:HanaOdbc"];
             db = _db;
+            log = _log;
         }
 
         public async Task<List<Reports>> ReportName()

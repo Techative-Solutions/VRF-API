@@ -9,6 +9,7 @@ using VRF_API.Model.ResponseModel;
 using VRF_API.Repository;
 using VRF_API.Utilities;
 using static VRF_API.Model.ResponseModel.EnumResponse;
+using Log = VRF_API.Repository.Log;
 
 namespace VRF_API.Services
 {
@@ -40,13 +41,14 @@ namespace VRF_API.Services
         private readonly DbConnection db;
         private readonly string sConstr;
         private readonly Repository.Log log;
-        public UserService(IConfiguration configuration, OdbcConnection connection, DbConnection _db)
+        public UserService(IConfiguration configuration, OdbcConnection connection, DbConnection _db, Log _log)
         {
             _configuration = configuration;
             _connection = connection;
             sDBName = _configuration["HanaSettings:DBName"];
             sConstr = _configuration["ConnectionStrings:HanaOdbc"];
             db = _db;
+            log = _log;
         }
 
         public async Task<ApiResponse> Login(string username, string password)

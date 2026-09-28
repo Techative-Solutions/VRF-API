@@ -44,10 +44,17 @@
         public string GstNumber { get; set; }
         public string UserName { get; set; }
 
-     
-
-
-
+    
 
     }
-}
+    public class DraftReq1
+    {
+
+
+        public string GstNumber { get; set; }
+
+    }
+
+    }
+
+    
