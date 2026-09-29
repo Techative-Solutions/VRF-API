@@ -410,7 +410,7 @@ namespace VRF_API.Repository
         }
         public class SubmitVendorRequest
         {
-            public bool IsExistingVendor { get; set; }
+            public bool IsDraftApproved { get; set; }
 
             public bool OtpValid { get; set; }
 
