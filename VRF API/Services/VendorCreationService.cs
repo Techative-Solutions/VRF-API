@@ -475,11 +475,11 @@ namespace VRF_API.Services
       );
 
                 string existingDraftQuery = $@"
-                    SELECT ""Id""
-                    FROM ""{sDBName}"".""TEC_OLED""
-                    WHERE ""GstNo"" = ?
-                      AND IFNULL(""Draft"", 'N') = 'Y'
-                    ORDER BY ""Id"" DESC";
+    SELECT ""Id""
+    FROM ""{sDBName}"".""TEC_OLED""
+    WHERE ""GstNo"" = ?
+      AND (""Draft"" = 'Y' OR ""Draft"" = '')
+    ORDER BY ""Id"" DESC";
 
                 using (var command = new OdbcCommand(existingDraftQuery, connection, transaction))
                 {
@@ -2509,7 +2509,7 @@ namespace VRF_API.Services
                 SELECT TOP 1 ""Id""
                 FROM ""{sDBName}"".""TEC_OLED""
                 WHERE ""GstNo"" = ?
-                AND IFNULL(""Draft"", 'N') = 'Y'
+                AND IFNULL(""Draft"", 'N') = ''
                 ORDER BY ""Id"" DESC";
 
 
