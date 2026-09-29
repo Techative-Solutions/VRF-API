@@ -297,7 +297,7 @@ namespace VRF_API.Services
 
             log.WriteToLogFile_Debug(
                 $"[{functionName}] [REQUEST] - Request type: " +
-                $"ExistingVendor: {request.IsExistingVendor} | " +
+                $"ExistingVendor: {request.IsDraftApproved} | " +
                 $"OtpValid: {request.OtpValid}",
                 functionName
             );
@@ -416,6 +416,7 @@ namespace VRF_API.Services
                 $"[{functionName}] [VALIDATION] - Vendor request validation completed successfully.",
                 functionName
             );
+            _sessionManager.Set("IsDraftApproved",Convert.ToString(request.IsDraftApproved));
 
             log.WriteToLogFile_Debug(
          $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
@@ -3223,6 +3224,8 @@ namespace VRF_API.Services
             var bank = model.BankDetails;
             var msme = model.MsmeDetails;
             var payment = model.PaymentDetails;
+            bool approved = Convert.ToBoolean(_sessionManager.Get("IsDraftApproved"));
+            string app1 = approved == true ? "N":"Y";
 
             string businessType =
                 GetStringProperty(payment, "TypeOfVendor");
@@ -3274,7 +3277,7 @@ namespace VRF_API.Services
             command.Parameters.AddWithValue("@GstNo", model.GstNumber ?? "");
             command.Parameters.AddWithValue("@DeclarationName", model.DeclarationName ?? "");
             command.Parameters.AddWithValue("@DeclarationDesignation", model.DeclarationDesignation ?? "");
-            command.Parameters.AddWithValue("@Draft", 'Y');
+            command.Parameters.AddWithValue("@Draft", app1);
             command.Parameters.AddWithValue("@AppliedDate", DateTime.Now.ToString("yyyy-MM-dd"));
             command.Parameters.AddWithValue("@PartnerType", model.PartnerType ?? "");
             command.Parameters.AddWithValue("@PanNo", model.PanNumber ?? "");
