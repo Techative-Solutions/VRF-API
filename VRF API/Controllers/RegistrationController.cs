@@ -97,7 +97,8 @@ namespace VRF_API.Controllers
         {
             var response = await _rejistrationForm.DraftApproved1(
            
-                   request.GstNumber
+                   request.GstNumber,
+                   request.UserName
 
                 );
 

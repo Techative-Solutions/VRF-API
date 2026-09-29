@@ -53,6 +53,9 @@
 
         public string GstNumber { get; set; }
 
+        public string UserName { get; set; }
+        
+
     }
 
     }
