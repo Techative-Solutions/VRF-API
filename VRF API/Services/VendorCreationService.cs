@@ -416,7 +416,7 @@ namespace VRF_API.Services
                 $"[{functionName}] [VALIDATION] - Vendor request validation completed successfully.",
                 functionName
             );
-            _sessionManager.Set("IsDraftApproved",Convert.ToString(request.IsDraftApproved));
+            _sessionManager.Set("IsDraftApproved",Convert.ToString(request.OtpValid));
 
             log.WriteToLogFile_Debug(
          $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
@@ -6207,7 +6207,7 @@ namespace VRF_API.Services
     $@"SELECT ""GstNo""
        FROM {sDBName}.""TEC_OLED""
        WHERE ""GstNo"" = '{gstNumber}'
-       AND (""Draft"" = 'Y' OR ""Draft"" = '')"
+       AND (""Draft"" = 'Y' OR ""Draft"" = '' OR ""Draft"" ='N')"
 );
 
             // ---------------------------------------------------------

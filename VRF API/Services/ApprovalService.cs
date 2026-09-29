@@ -153,24 +153,24 @@ namespace VRF_API.Services
                    $"Pending approval record count: {dt.Rows.Count}",
                    "SaveApproval"
                );
-                if (dt.Rows.Count > 0)
-                {
-                    log.WriteToLogFile_Debug(
-                $"[ApprovalService] [SaveApproval] [VALIDATION] - " +
-                $"User has pending approvals. Approver master change is not allowed. " +
-                $"UserName: {approvalRequest.UserName}",
-                "SaveApproval"
-            );
+            //    if (dt.Rows.Count > 0)
+            //    {
+            //        log.WriteToLogFile_Debug(
+            //    $"[ApprovalService] [SaveApproval] [VALIDATION] - " +
+            //    $"User has pending approvals. Approver master change is not allowed. " +
+            //    $"UserName: {approvalRequest.UserName}",
+            //    "SaveApproval"
+            //);
 
-                    return new ApiResponse
-                    {
-                        Status = ApiStatusEnum.Failure,
-                        Message = "Kindly approve all waiting approvals before change the approver master.",
-                        ErrorCode = ErrorCodeEnum.Failure,
-                        Data = null
-                    };
+            //        return new ApiResponse
+            //        {
+            //            Status = ApiStatusEnum.Failure,
+            //            Message = "Kindly approve all waiting approvals before change the approver master.",
+            //            ErrorCode = ErrorCodeEnum.Failure,
+            //            Data = null
+            //        };
 
-                }
+            //    }
                 string count1 = db.GetSingleValue($@"Select ifnull(max(""ID""),0)+1 from ""{sDBName}"".""ApproverMaster""");
                 Int64 ID = Convert.ToInt64(count1);
                 log.WriteToLogFile_Debug(
