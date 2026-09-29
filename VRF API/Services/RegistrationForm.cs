@@ -4888,7 +4888,7 @@ namespace VRF_API.Services
       );
                 DataTable mailTemplateTable =
                     db.ExecuteQueryForDataTable(
-                        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT_1""('{templateType}')"
+                        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT""('{templateType}')"
                     );
 
                 string body = "";
@@ -4981,20 +4981,20 @@ namespace VRF_API.Services
                 // =====================================================
 
                 string fromMail =
-                    _configuration["MailSettings:MAILID"] ?? "";
+                    _configuration["Mail:fromMail"] ?? "";
 
                 string username =
-                    _configuration["MailSettings:SMTPUSER"] ?? "";
+                    _configuration["Mail:SMTPUSER"] ?? "";
 
                 string password =
-                    _configuration["MailSettings:SMTPPWD"] ?? "";
+                    _configuration["Mail:SMTPPWD"] ?? "";
 
                 string server =
-                    _configuration["MailSettings:SMTPSERVER"] ?? "";
+                    _configuration["Mail:SMTPSERVER"] ?? "";
 
                 int port =
                     int.TryParse(
-                        _configuration["MailSettings:SMTPPORT"],
+                        _configuration["Mail:SMTPPORT"],
                         out int smtpPort
                     )
                         ? smtpPort
