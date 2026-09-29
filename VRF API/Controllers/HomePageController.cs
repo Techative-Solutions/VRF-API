@@ -29,7 +29,7 @@ namespace VRF_API.Controllers
         [HttpPost]
         [Route("SearchGSTNumber")]
         public async Task<ActionResult> SearchGSTNumber([FromBody] string gstNumber)
-        {
+         {
             var response = await _homePageService.SearchGSTNumber(gstNumber);
             return Ok(response);
         }

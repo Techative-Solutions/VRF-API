@@ -4127,11 +4127,11 @@ namespace VRF_API.Services
                 if (IsDepartment != "" && IsDepartment != null)
                 {
 
-                    ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}','{Department} ','1','{GstNumber}','{level} ','{Remarks}')");
+                    ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}', '{Department.Trim()}','1','{GstNumber}','{level} ','{Remarks}')");
                 }
                 else
                 {
-                    ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}','{Department} ','1','{GstNumber}','{level} ','{Remarks}')");
+                    ExecuteNonQuery($@"insert into ""{sDBName}"".""ApprovalCheck""  (""UserName"",""ApprovedDepartment"",""DepartmentApprovedCount"",""GSTNO"",""Level"",""Reason"") values('{UserName}', '{Department.Trim()}','1','{GstNumber}','{level} ','{Remarks}')");
                 }
 
 
