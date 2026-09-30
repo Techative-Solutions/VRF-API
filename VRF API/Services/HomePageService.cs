@@ -58,9 +58,13 @@ namespace VRF_API.Services
             {
                 _sessionManager.Set("GSTNumber", gstNumber);
                 _sessionManager.Set("IsDraft", "Y");
-                string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
+                string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}'";
+                //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
                 string isExist = db.GetSingleValue(query);
-                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" ='')";
+                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" !='' OR ""DraftApproved"" !='Y')";
+                //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
+                //string isExist = db.GetSingleValue(query);
+                //string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""DraftApproved"" !='Y')";
                 string isExist1 = db.GetSingleValue(query1);
                 string ReApplySts = db.GetSingleValue($@"Select 'N' from ""{sDBName}"".""ApprovalTrace"" where  ""GstNo""='{gstNumber}' and ""ReApplySts""='No' ");
                 log.WriteToLogFile_Debug($"Checks: isExist=" + isExist + ", isExist1=" + isExist1 + ", ReApplySts=" + ReApplySts, functionName);
