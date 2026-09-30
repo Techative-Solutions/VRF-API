@@ -143,12 +143,12 @@ namespace VRF_API.Controllers
         [HttpGet]
         [Route("ViewKYCFile")]
         public async Task<IActionResult> ViewKYCFile(
-            [FromQuery] string fileName,
-            [FromQuery] string? gstNumber,
-            [FromQuery] string documentType)
+    [FromQuery] string fileName,
+    [FromQuery] string? gstNumber,
+    [FromQuery] string documentType)
         {
             var response = await _vendorCreationService.ViewKYCFile(
-               fileName,
+                fileName,
                 gstNumber ?? "",
                 documentType);
 
@@ -159,16 +159,29 @@ namespace VRF_API.Controllers
 
             var fileResult = response.Data as FileResultModel;
 
-            if (fileResult == null || fileResult.FileBytes == null || fileResult.FileBytes.Length == 0)
+            if (fileResult?.FileBytes == null ||
+                fileResult.FileBytes.Length == 0)
             {
                 return NotFound("File not found.");
             }
 
-            return File(
-                fileResult.FileBytes,
-                GetContentType(fileResult.FileName),
-                enableRangeProcessing: true);
+            Response.Clear();
+
+            Response.ContentType = "application/pdf";
+
+            Response.Headers.Remove("Content-Disposition");
+            Response.Headers.Append(
+                "Content-Disposition",
+                $"inline; filename=\"{Path.GetFileName(fileResult.FileName)}\""
+            );
+
+            Response.ContentLength = fileResult.FileBytes.Length;
+
+            await Response.Body.WriteAsync(fileResult.FileBytes);
+
+            return new EmptyResult();
         }
+
 
         [HttpPost]
         [Route("NextPageCheck")]

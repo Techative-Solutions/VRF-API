@@ -698,7 +698,10 @@ namespace VRF_API.Services
                functionName
            );
 
-                    await SentMail(request.FormData,email, request.FormData.PaymentDetails.AgencyEmail);
+                    if (!request.OtpValid)
+                    {
+                        await SentMail(request.FormData, email, request.FormData.PaymentDetails.AgencyEmail);
+                    }
 
                     log.WriteToLogFile_Debug(
                         $"[{functionName}] [MAIL] - Vendor submission email sent successfully. " +
@@ -785,7 +788,7 @@ namespace VRF_API.Services
         {
             const string functionName = "SentMail";
             const string mailTemplate = "DRAFT";
-            const string spName = "Mail_BOSY&SUBJECT_1";
+            const string spName = "Mail_BOSY&SUBJECT";
 
             log.WriteToLogFile_Debug(
                 $"[{functionName}] [START] - Vendor submission mail process started.",
@@ -998,7 +1001,7 @@ namespace VRF_API.Services
           );
 
                     string query =
-                        $"CALL \"{sDBName}\".\"Mail_BOSY&SUBJECT_1\"('DRAFT')";
+                        $"CALL \"{sDBName}\".\"Mail_BOSY&SUBJECT\"('DRAFT')";
 
                     using (var command = new OdbcCommand(query, connection))
                     {
@@ -6804,7 +6807,7 @@ namespace VRF_API.Services
             SELECT ""DraftApproved""
             FROM {sDBName}.""TEC_OLED""
             WHERE ""GstNo"" = ?
-            AND ""Draft"" = 'Y'";
+            AND ""Draft"" = 'N'";
 
                             using (OdbcCommand command = new OdbcCommand(
                                 draftApprovedQuery,
