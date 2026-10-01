@@ -63,6 +63,8 @@ namespace VRF_API.Services
            string UserName
 
           );
+
+        Task<List<DeportmentResponse>> Department(string UserName);
     }
 
 
@@ -2320,10 +2322,65 @@ namespace VRF_API.Services
           $"TemplateType: {templateType}",
           functionName
       );
+                if (mailTemplate != null &&
+       mailTemplate.Trim().Equals("SAP", StringComparison.OrdinalIgnoreCase))
+                {
+                    string vendorName =
+                        cardCode.ToString()?.Trim() ?? "";
+
+                    if (string.IsNullOrWhiteSpace(vendorName))
+                    {
+                        vendorName = "Vendor";
+                    }
+
+                    // Remove invalid characters from vendor name
+                    foreach (char invalidChar in Path.GetInvalidFileNameChars())
+                    {
+                        vendorName = vendorName.Replace(invalidChar.ToString(), "");
+                    }
+
+                    string pdfFolder =
+                        _configuration["Folder:VendorPath"];
+
+                    if (string.IsNullOrWhiteSpace(pdfFolder))
+                    {
+                        pdfFolder = Path.Combine(
+                            AppDomain.CurrentDomain.BaseDirectory,
+                            "VendorPDF"
+                        );
+                    }
+
+                    // Create folder if it does not exist
+                    if (!Directory.Exists(pdfFolder))
+                    {
+                        Directory.CreateDirectory(pdfFolder);
+                    }
+
+                    string pdfFileName = $"{vendorName}.pdf";
+
+                    string pdfFilePath =
+                        Path.Combine(pdfFolder, pdfFileName);
+
+                    await File.WriteAllBytesAsync(
+                        pdfFilePath,
+                        pdfBytes
+                    );
+
+                    log.WriteToLogFile_Debug(
+                        $"[{functionName}] [PDF] - SAP PDF saved successfully. " +
+                        $"VendorName: {vendorName} | " +
+                        $"FilePath: {pdfFilePath}",
+                        functionName
+                    );
+                }
                 DataTable mailTemplateTable =
                     db.ExecuteQueryForDataTable(
-                        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT_1""('{templateType}')"
+                        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT""('{templateType}')"
                     );
+                //DataTable mailTemplateTable =
+                //    db.ExecuteQueryForDataTable(
+                //        $@"Call ""{sDBName}"".""Mail_BOSY&SUBJECT_1""('{templateType}')"
+                //    );
 
                 string body = "";
                 string subject = "";
@@ -4517,7 +4574,93 @@ namespace VRF_API.Services
             }
 
         }
+        public async Task<List<DeportmentResponse>> Department(string UserName)
+        {
+            const string functionName = "Department";
+           
+            List<DeportmentResponse> RejDetailsList = new();
 
+            log.WriteToLogFile_Debug(
+                $"[{functionName}] [START] - Department details retrieval started.",
+                functionName
+            );
+
+
+
+
+            try
+            {
+                log.WriteToLogFile_Debug(
+            $"[{functionName}] [REQUEST] - Department details request received.",
+            functionName
+        );
+
+                string query =
+                    $@"select ""Department"" from ""{sDBName}"".""TEC_OUSR"" where ""User_Name""='{UserName}'";
+
+                using var connection = new OdbcConnection(sConstr);
+                log.WriteToLogFile_Debug(
+             $"[{functionName}] [CONNECTION] - Opening ODBC database connection.",
+             functionName
+         );
+
+                connection.Open();
+                log.WriteToLogFile_Debug(
+         $"[{functionName}] [CONNECTION] - ODBC database connection opened successfully.",
+         functionName
+     );
+
+                using var cmd = new OdbcCommand(query, connection);
+
+            
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [DATABASE] - Stored procedure executed successfully.",
+           functionName
+       );
+
+                while (await reader.ReadAsync())
+                {
+                    var detail = new DeportmentResponse
+                    {
+                   
+                        DepartmentName = reader["Department"] == DBNull.Value ? null : reader["Department"].ToString()
+                       
+
+
+                    };
+
+                    RejDetailsList.Add(detail);
+                }
+
+                log.WriteToLogFile_Debug(
+           $"[{functionName}] [SUCCESS] - Department details retrieved successfully. " +
+           $"Total records: {RejDetailsList.Count}",
+           functionName
+       );
+
+                return RejDetailsList;
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+             $"[{functionName}] [EXCEPTION] - Error while retrieving department details. " +
+             $"Message: {ex.Message} | " +
+             $"StackTrace: {ex.StackTrace}",
+             functionName
+         );
+                return new List<DeportmentResponse>();
+            }
+            finally
+            {
+                log.WriteToLogFile_Debug(
+             $"[{functionName}] [END] - Department details retrieval ended. " +
+             $"Total records: {RejDetailsList.Count}",
+             functionName
+         );
+            }
+        }
         private async Task<(bool Success, string Message)> SentMail1(
   string toMail,
   string agentMail,

@@ -708,7 +708,7 @@ namespace VRF_API.Repository
         {
             public string MaterialDescription { get; set; }
 
-            public string HsnCode { get; set; }
+            public string? HsnCode { get; set; }
 
             public string Brand { get; set; }
 

@@ -3191,7 +3191,8 @@ namespace VRF_API.Services
                     ""Sstate"" = ?,
                     ""Scity"" = ?,
                     ""Szipcode"" = ?,
-                    ""ContactPerson"" = ?
+                    ""ContactPerson"" = ?,
+                    ""Approval"" =?
                 WHERE ""Id"" = ?";
 
             using var command = new OdbcCommand(
@@ -3229,6 +3230,7 @@ namespace VRF_API.Services
             var payment = model.PaymentDetails;
             bool approved = Convert.ToBoolean(_sessionManager.Get("IsDraftApproved"));
             string app1 = approved == true ? "N":"Y";
+            string valid = approved == true ? "Y" : "";
 
             string businessType =
                 GetStringProperty(payment, "TypeOfVendor");
@@ -3307,6 +3309,7 @@ namespace VRF_API.Services
             command.Parameters.AddWithValue("@Scity", shipping?.City ?? "");
             command.Parameters.AddWithValue("@Szipcode", shipping?.Pincode ?? "");
             command.Parameters.AddWithValue("@ContactPerson", model.ContactPerson ?? "");
+            command.Parameters.AddWithValue("@Approval", valid);
         }
 
         private async Task SubmitInsertPaymentDetails(
@@ -3340,7 +3343,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue("@Id", id);
             command.Parameters.AddWithValue("@CreditDays", GetStringProperty(payment, "CreditDays"));
-            command.Parameters.AddWithValue("@DisCount", GetStringProperty(payment, "DisCount"));
+            command.Parameters.AddWithValue("@DisCount", GetStringProperty(payment, "BillLevelDiscount"));
             command.Parameters.AddWithValue("@MarkDownTax0", GetStringProperty(payment, "MarkDownWithTax0"));
             command.Parameters.AddWithValue("@MarkDownWithoutTax0", GetStringProperty(payment, "MarkDownWithoutTax0"));
             command.Parameters.AddWithValue("@MarkDownTax3", GetStringProperty(payment, "MarkDownWithTax3"));
@@ -4305,7 +4308,7 @@ namespace VRF_API.Services
 
             string uploadFolder =
                 _configuration[
-                    "Folder:ImagePath"
+                    "Folder:Path"
                 ];
 
 
@@ -4794,7 +4797,7 @@ namespace VRF_API.Services
             log.WriteToLogFile_Debug($"{functionName} - Starting the function", functionName);
             string gstNumber = _sessionManager.Get("GSTNumber") ?? string.Empty;
             BindPartners();
-            BindOperationalContacts();
+            List<OperationalContact> contacts = BindOperationalContacts();
             BindOtherInformation();
             BindKYCGrid1();
             BindKYCGrid11();
@@ -4825,11 +4828,13 @@ namespace VRF_API.Services
             {
                 InitializeGrid();
             }
+            List<OperationalContact> list = new List<OperationalContact>();
             var response = new
             {
                 contactPerson = contactPersonDropDowns,
                 states = states,
                 banks = banks,
+                contacts = contacts,
                 countires = countries
             };
             return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Loaded the intial values", response);
@@ -5514,6 +5519,19 @@ namespace VRF_API.Services
                    from ""{sDBName}"".""TEC_OLED"" 
                    where ""GstNo""='" + gstNumber + "'"
                     );
+                    string reApplySts = db.GetSingleValue($@"
+           SELECT 'N'
+           FROM ""{sDBName}"".""ApprovalTrace""
+           WHERE ""GstNo"" = '{gstNumber}'
+           AND ""ReApplySts"" = 'No'
+       ");
+                    if (reApplySts == "Y" || reApplySts == "")
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "VendorCreation", new
+                        {
+                            Redirect = "VendorCreation"
+                        });
+                    }
 
                     if (!string.IsNullOrEmpty(draftCheck))
                     {
@@ -6807,7 +6825,7 @@ namespace VRF_API.Services
             SELECT ""DraftApproved""
             FROM {sDBName}.""TEC_OLED""
             WHERE ""GstNo"" = ?
-            AND ""Draft"" = 'N'";
+            AND ""Draft"" = 'Y'";
 
                             using (OdbcCommand command = new OdbcCommand(
                                 draftApprovedQuery,
@@ -6888,7 +6906,7 @@ namespace VRF_API.Services
             };
             _sessionManager.Set("OtherInformation", JsonConvert.SerializeObject(otherInformation));
         }
-        private void BindOperationalContacts()
+        private List<OperationalContact> BindOperationalContacts()
         {
             List<OperationalContact> contacts = new List<OperationalContact>
             {
@@ -6896,6 +6914,7 @@ namespace VRF_API.Services
                 new OperationalContact { Department = "sale manager", ContactNo = "", Email = "" },
                 new OperationalContact { Department = "Account Head", ContactNo = "", Email = "" }
             };
+            return contacts;
             _sessionManager.Set("OperationalContact", JsonConvert.SerializeObject(contacts));
         }
         protected void BindPartners()

@@ -105,7 +105,13 @@ namespace VRF_API.Controllers
             return Ok(response);
         }
 
-
+        [HttpGet]
+        [Route("Department")]
+        public async Task<ActionResult> Department(string UserName)
+        {
+            var response = await _rejistrationForm.Department(UserName);
+            return Ok(response);
+        }
        
 
 

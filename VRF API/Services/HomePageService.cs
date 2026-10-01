@@ -48,73 +48,362 @@ namespace VRF_API.Services
             _sessionManager = sessionManager;
             log = _log;
         }
-
         public async Task<ApiResponse> SearchGSTNumber(string gstNumber)
         {
             string functionName = "Search_GST_Number";
-            log.WriteToLogFile_Debug($"{functionName} - Starting the function", functionName);
-            log.WriteToLogFile_Debug($"{functionName} - Entered GST Number: {gstNumber}", functionName);
+            string liveDbName = _configuration["HanaSettings:DBName_Live"];
+
+            log.WriteToLogFile_Debug(
+                $"{functionName} - Starting the function",
+                functionName
+            );
+
+            log.WriteToLogFile_Debug(
+                $"{functionName} - Entered GST Number: {gstNumber}",
+                functionName
+            );
+
             if (!string.IsNullOrEmpty(gstNumber))
             {
-                _sessionManager.Set("GSTNumber", gstNumber);
-                _sessionManager.Set("IsDraft", "Y");
-                string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}'";
-                //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
-                string isExist = db.GetSingleValue(query);
-                string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" !='' OR ""DraftApproved"" !='Y')";
-                //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
-                //string isExist = db.GetSingleValue(query);
-                //string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""DraftApproved"" !='Y')";
-                string isExist1 = db.GetSingleValue(query1);
-                string ReApplySts = db.GetSingleValue($@"Select 'N' from ""{sDBName}"".""ApprovalTrace"" where  ""GstNo""='{gstNumber}' and ""ReApplySts""='No' ");
-                log.WriteToLogFile_Debug($"Checks: isExist=" + isExist + ", isExist1=" + isExist1 + ", ReApplySts=" + ReApplySts, functionName);
-                if (ReApplySts == "N")
+                try
                 {
-                    log.WriteToLogFile_Debug("Validation Failed - Reapply not allowed for GST: " + gstNumber, functionName);
-                    return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Reapply not allowed for GST", null);
-                    
-                }
-                if (isExist1 == "Y")
-                {
-                    string LiveDb = _configuration.GetValue<string>("HanaSettings:DBName_Live") ?? "";
-                    string gstNew = db.GetSingleValue($@"select ""CardCode"" from " + LiveDb + ".CRD1 where  \"GSTRegnNo\" = '" + gstNumber + "'");
-                    log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [FLOW] - Live DB card code: " + gstNew, "btnHiddenSearch_Click");
-                    if (gstNew != null && gstNew != "")
+                    // ---------------------------------------------------------
+                    // Set session values
+                    // ---------------------------------------------------------
+                    _sessionManager.Set("GSTNumber", gstNumber);
+                    _sessionManager.Set("IsDraft", "Y");
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - Session values set successfully",
+                        functionName
+                    );
+
+                    // ---------------------------------------------------------
+                    // Check whether GST exists in TEC_OLED
+                    // ---------------------------------------------------------
+                    string isExist = db.GetSingleValue($@"
+           SELECT 'Y'
+           FROM ""{sDBName}"".""TEC_OLED""
+           WHERE ""GstNo"" = '{gstNumber}'
+       ");
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - GST exists check: {isExist}",
+                        functionName
+                    );
+
+                    // ---------------------------------------------------------
+                    // If GST does not exist
+                    // ---------------------------------------------------------
+                    if (isExist != "Y")
                     {
-                        _sessionManager.Set("GSTNumber",gstNumber);
-                        log.WriteToLogFile_Debug("Redirecting to /Pages/NewProduct.aspx", functionName);
-                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Redirecting to NewProduct page", "NewProduct");
-                       
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - GST Number does not exist",
+                            functionName
+                        );
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "Invalid GST Number",
+                            null
+                        );
                     }
-                    else
+
+                    // ---------------------------------------------------------
+                    // Get Draft value
+                    // ---------------------------------------------------------
+                    string draft = db.GetSingleValue($@"
+           SELECT ""Draft""
+           FROM ""{sDBName}"".""TEC_OLED""
+           WHERE ""GstNo"" = '{gstNumber}'
+       ");
+
+                    // ---------------------------------------------------------
+                    // Get DraftApproved value
+                    // ---------------------------------------------------------
+                    string draftApproved = db.GetSingleValue($@"
+           SELECT IFNULL(""DraftApproved"", '')
+           FROM ""{sDBName}"".""TEC_OLED""
+           WHERE ""GstNo"" = '{gstNumber}'
+       ");
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - Draft: '{draft}'",
+                        functionName
+                    );
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - DraftApproved: '{draftApproved}'",
+                        functionName
+                    );
+
+                    // ---------------------------------------------------------
+                    // Check ReApply status
+                    // ---------------------------------------------------------
+                    string reApplySts = db.GetSingleValue($@"
+           SELECT 'N'
+           FROM ""{sDBName}"".""ApprovalTrace""
+           WHERE ""GstNo"" = '{gstNumber}'
+           AND ""ReApplySts"" = 'No'
+       ");
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - ReApplySts: {reApplySts}",
+                        functionName
+                    );
+
+                    if (reApplySts == "N")
                     {
-                        log.WriteToLogFile_Debug("Validation Failed - GST already submitted, card code not found on live", functionName);
-                        _sessionManager.Set("GSTNumber", "");
-                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GST Number is already submitted",null);
-                        
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - Reapply not allowed for GST",
+                            functionName
+                        );
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "Reapply is not allowed for this GST Number",
+                            null
+                        );
                     }
-                    
+                    if(reApplySts == "Y" || reApplySts == "")
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "VendorCreation", new
+                        {
+                            Redirect = "VendorCreation"
+                        });
+                    }
+
+                    // =========================================================
+                    // CASE 1:
+                    // Draft = Y
+                    // DraftApproved = Y
+                    // Already submitted
+                    // =========================================================
+                    //if (draft == "Y" && draftApproved == "Y")
+                    //{
+                    //    log.WriteToLogFile_Debug(
+                    //        $"{functionName} - Draft=Y and DraftApproved=Y. GST already submitted.",
+                    //        functionName
+                    //    );
+
+                    //    return ApiResponseUtility.GenerateApiResponse(
+                    //        ApiStatusEnum.Failure,
+                    //        "Entered GST Number is already submitted",
+                    //        null
+                    //    );
+                    //}
+
+                    // =========================================================
+                    // CASE 2:
+                    // Draft = N
+                    // DraftApproved = Y
+                    // Redirect to VendorCreation
+                    // =========================================================
+                    if (draft == "Y" && draftApproved == "Y")
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - Draft=N and DraftApproved=Y. Redirecting to VendorCreation.",
+                            functionName
+                        );
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Success,
+                            "GST Number is valid",
+                            new
+                            {
+                                Redirect = "VendorCreation"
+                            }
+                        );
+                    }
+
+                    // =========================================================
+                    // CASE 3:
+                    // Draft is empty
+                    // Redirect to VendorCreation
+                    // =========================================================
+                    if (string.IsNullOrEmpty(draft))
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - Draft is empty. Redirecting to VendorCreation.",
+                            functionName
+                        );
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Success,
+                            "GST Number is valid",
+                            new
+                            {
+                                Redirect = "VendorCreation"
+                            }
+                        );
+                    }
+
+                    // =========================================================
+                    // EXISTING LOGIC:
+                    // Draft = N and not approved
+                    // Check whether CardCode already exists in Live DB
+                    // =========================================================
+                    if (draft == "N" && draftApproved != "Y")
+                    {
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - Draft=N and DraftApproved is not Y. Checking Live DB.",
+                            functionName
+                        );
+
+                        string cardCode = db.GetSingleValue($@"
+               SELECT ""CardCode""
+               FROM ""{liveDbName}"".""CRD1""
+               WHERE ""GSTRegnNo"" = '{gstNumber}'
+           ");
+
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - Live DB CardCode: {cardCode}",
+                            functionName
+                        );
+
+                        if (!string.IsNullOrEmpty(cardCode))
+                        {
+                            log.WriteToLogFile_Debug(
+                                $"{functionName} - CardCode found. Redirecting to NewProduct.",
+                                functionName
+                            );
+
+                            return ApiResponseUtility.GenerateApiResponse(
+                                ApiStatusEnum.Success,
+                                "GST Number is already registered",
+                                new
+                                {
+                                    Redirect = "NewProduct",
+                                    CardCode = cardCode
+                                }
+                            );
+                        }
+
+                        log.WriteToLogFile_Debug(
+                            $"{functionName} - CardCode not found. GST already submitted.",
+                            functionName
+                        );
+
+                        return ApiResponseUtility.GenerateApiResponse(
+                            ApiStatusEnum.Failure,
+                            "Entered GST Number is already submitted",
+                            null
+                        );
+                    }
+
+                    // =========================================================
+                    // Any other case
+                    // =========================================================
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - GST validation completed without a matching condition.",
+                        functionName
+                    );
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        "Unable to process the entered GST Number",
+                        null
+                    );
                 }
-                if (isExist == "Y")
+                catch (Exception ex)
                 {
-                    log.WriteToLogFile_Debug("Redirecting to /Pages/VendorCreation.aspx", functionName);
-                    return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Redirecting to the vendor creation page", "VendorCreation");
-                    
-                }
-                else
-                {
-                    log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [VALIDATION_FAILED] - Entered GSTNo is Invalid: " + gstNumber, functionName);
-                    _sessionManager.Set("GSTNumber", "");
-                    return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GSTNo is invalid",null);                 
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - Exception: {ex.Message}",
+                        functionName
+                    );
+
+                    log.WriteToLogFile_Debug(
+                        $"{functionName} - StackTrace: {ex.StackTrace}",
+                        functionName
+                    );
+
+                    return ApiResponseUtility.GenerateApiResponse(
+                        ApiStatusEnum.Failure,
+                        $"Error while checking GST Number: {ex.Message}",
+                        null
+                    );
                 }
             }
-
             else
             {
-                log.WriteToLogFile_Debug("Validation failed - GST number is empty", functionName);
-                return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "GST Number is empty", null);
+                log.WriteToLogFile_Debug(
+                    $"{functionName} - GST Number is empty",
+                    functionName
+                );
 
+                return ApiResponseUtility.GenerateApiResponse(
+                    ApiStatusEnum.Failure,
+                    "GST Number cannot be empty",
+                    null
+                );
             }
         }
+        //public async Task<ApiResponse> SearchGSTNumber(string gstNumber)
+        //{
+        //    string functionName = "Search_GST_Number";
+        //    log.WriteToLogFile_Debug($"{functionName} - Starting the function", functionName);
+        //    log.WriteToLogFile_Debug($"{functionName} - Entered GST Number: {gstNumber}", functionName);
+        //    if (!string.IsNullOrEmpty(gstNumber))
+        //    {
+        //        _sessionManager.Set("GSTNumber", gstNumber);
+        //        _sessionManager.Set("IsDraft", "Y");
+        //        string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}'";
+        //        //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
+        //        string isExist = db.GetSingleValue(query);
+        //        string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" !='' OR ""DraftApproved"" !='Y')";
+        //        //string query = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""Draft"" = 'Y' OR ""Draft"" = '')";
+        //        //string isExist = db.GetSingleValue(query);
+        //        //string query1 = $@"select 'Y' from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{gstNumber}' and (""DraftApproved"" !='Y')";
+        //        string isExist1 = db.GetSingleValue(query1);
+        //        string ReApplySts = db.GetSingleValue($@"Select 'N' from ""{sDBName}"".""ApprovalTrace"" where  ""GstNo""='{gstNumber}' and ""ReApplySts""='No' ");
+        //        log.WriteToLogFile_Debug($"Checks: isExist=" + isExist + ", isExist1=" + isExist1 + ", ReApplySts=" + ReApplySts, functionName);
+        //        if (ReApplySts == "N")
+        //        {
+        //            log.WriteToLogFile_Debug("Validation Failed - Reapply not allowed for GST: " + gstNumber, functionName);
+        //            return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Reapply not allowed for GST", null);
+
+        //        }
+        //        if (isExist1 == "Y")
+        //        {
+        //            string LiveDb = _configuration.GetValue<string>("HanaSettings:DBName_Live") ?? "";
+        //            string gstNew = db.GetSingleValue($@"select ""CardCode"" from " + LiveDb + ".CRD1 where  \"GSTRegnNo\" = '" + gstNumber + "'");
+        //            log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [FLOW] - Live DB card code: " + gstNew, "btnHiddenSearch_Click");
+        //            if (gstNew != null && gstNew != "")
+        //            {
+        //                _sessionManager.Set("GSTNumber",gstNumber);
+        //                log.WriteToLogFile_Debug("Redirecting to /Pages/NewProduct.aspx", functionName);
+        //                return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Redirecting to NewProduct page", "NewProduct");
+
+        //            }
+        //            else
+        //            {
+        //                log.WriteToLogFile_Debug("Validation Failed - GST already submitted, card code not found on live", functionName);
+        //                _sessionManager.Set("GSTNumber", "");
+        //                return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GST Number is already submitted",null);
+
+        //            }
+
+        //        }
+        //        if (isExist == "Y")
+        //        {
+        //            log.WriteToLogFile_Debug("Redirecting to /Pages/VendorCreation.aspx", functionName);
+        //            return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Redirecting to the vendor creation page", "VendorCreation");
+
+        //        }
+        //        else
+        //        {
+        //            log.WriteToLogFile_Debug("[HomePage] [btnHiddenSearch_Click] [VALIDATION_FAILED] - Entered GSTNo is Invalid: " + gstNumber, functionName);
+        //            _sessionManager.Set("GSTNumber", "");
+        //            return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "Entered GSTNo is invalid",null);                 
+        //        }
+        //    }
+
+        //    else
+        //    {
+        //        log.WriteToLogFile_Debug("Validation failed - GST number is empty", functionName);
+        //        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "GST Number is empty", null);
+
+        //    }
+        //}
     }
 }
