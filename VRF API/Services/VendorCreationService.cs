@@ -3511,6 +3511,21 @@ namespace VRF_API.Services
 
                 string product = GetStringProperty(item, "Product");
                 string imageUpload = GetStringProperty(item, "ImageUpload");
+                string imagePath = null;
+
+
+                // -------------------------------------------------
+                // imageUpload already contains uploaded filename/path
+                // -------------------------------------------------
+
+                if (!string.IsNullOrWhiteSpace(
+                    imageUpload))
+                {
+                    imagePath =
+                        GetUploadedImageFilePath(
+                            imageUpload
+                        );
+                }
 
                 string query = $@"
                     INSERT INTO ""{sDBName}"".""TEC_LED4""
@@ -3534,7 +3549,7 @@ namespace VRF_API.Services
                 command.Parameters.AddWithValue("@HSNCode", GetStringProperty(item, "HsnCode"));
                 command.Parameters.AddWithValue("@Brand", GetStringProperty(item, "Brand"));
                 command.Parameters.AddWithValue("@Size", GetStringProperty(item, "Size"));
-                command.Parameters.AddWithValue("@Product", product);
+                command.Parameters.AddWithValue("@Product", imagePath);
                 command.Parameters.AddWithValue("@TaxPercentage", GetStringProperty(item, "TaxPercentage"));
 
                 await command.ExecuteNonQueryAsync();
@@ -4206,7 +4221,7 @@ namespace VRF_API.Services
                     item.ImageUpload))
                 {
                     imagePath =
-                        GetUploadedFilePath(
+                        GetUploadedImageFilePath(
                             item.ImageUpload
                         );
                 }
@@ -4296,7 +4311,47 @@ namespace VRF_API.Services
         //     "TempFolder": "D:\\NHFS\\VendorDocuments"
         // }
         // =====================================================
+        private string GetUploadedImageFilePath(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return null;
+            }
 
+
+            string uploadFolder =
+                _configuration[
+                    "Folder:ImagePath"
+                ];
+
+
+            if (string.IsNullOrWhiteSpace(
+                uploadFolder))
+            {
+                throw new Exception(
+                    "FileUpload:TempFolder is missing in appsettings.json"
+                );
+            }
+
+
+            // If only filename is coming from React,
+            // combine folder + filename.
+            //
+            // If the API happens to return a full path,
+            // don't combine it again.
+
+            if (Path.IsPathRooted(fileName))
+            {
+                return fileName;
+            }
+
+
+            return Path.Combine(
+                uploadFolder,
+                fileName
+            );
+
+        }
         private string GetUploadedFilePath(
             string fileName)
         {
@@ -4805,6 +4860,7 @@ namespace VRF_API.Services
             List<State> states = LoadStates("");
             List<Bank> banks = LoadBanks();
             List<Country> countries = LoadCountries();
+            List<string> creditDays = LoadCreditDays();
             var businessDetails = new List<BusinessDetails>{
                 new BusinessDetails { BusinessState = "", GSTNumber = "", AddressOfPlace = "", GSTVendorClassification = "" }
             };
@@ -4835,7 +4891,8 @@ namespace VRF_API.Services
                 states = states,
                 banks = banks,
                 contacts = contacts,
-                countires = countries
+                countires = countries,
+                creditDays = creditDays
             };
             return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "Loaded the intial values", response);
 
@@ -6946,6 +7003,39 @@ namespace VRF_API.Services
                 new KYCDocument{DocumentType = "Performa Invoice",FileData = ""}
             };
             _sessionManager.Set("PerformaInvoice", JsonConvert.SerializeObject(kycDocuments));
+        }
+        private List<string> LoadCreditDays()
+        {
+            string functionName = "LoadCreditDays";
+            log.WriteToLogFile_Debug($"{functionName} - Starting the function", functionName);
+            try
+            {
+                string sp = $@"CALL ""{sDBName}"".""GetCreditDaysValues""";
+
+                log.WriteToLogFile_Debug($"{sp} - Calling the sp to fetch the contact persons", functionName);
+                DataTable dt = db.ExecuteQueryForDataTable(sp);
+
+                var creditDays = new List<string>();
+
+                if (dt != null && dt.Rows.Count > 0)
+                {
+                    foreach (DataRow row in dt.Rows)
+                    {
+                        creditDays.Add(row["Days"].ToString() ?? string.Empty);
+                    }
+                }
+                log.WriteToLogFile_Debug($"{functionName} - SP Result - {creditDays}", functionName);
+                return creditDays;
+            }
+            catch (Exception ex)
+            {
+                log.WriteToLogFile_Debug(
+                    "[LoadContactPersonDropdown] Error: " + ex.Message,
+                    "LoadContactPersonDropdown"
+                );
+
+                return new List<string>();
+            }
         }
         private List<string> LoadContactPersonDropdown()
         {

@@ -165,7 +165,7 @@ namespace VRF_API.Services
                             null
                         );
                     }
-                    if(reApplySts == "Y" || reApplySts == "")
+                    if(reApplySts == "Y")
                     {
                         return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "VendorCreation", new
                         {
