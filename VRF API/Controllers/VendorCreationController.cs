@@ -202,7 +202,7 @@ namespace VRF_API.Controllers
         [Route("SaveDraft")]
         public async Task<IActionResult> SaveDraft(SaveDraftRequest request)
         {
-            var response = await _vendorCreationService.SaveDraft(request.Page, request.FormData, request.UploadedFiles);
+            var response = await _vendorCreationService.SaveDraft(request.Page, request.ReApply, request.FormData, request.UploadedFiles);
             return Ok(response);
         }
 
