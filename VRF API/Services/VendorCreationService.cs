@@ -35,7 +35,7 @@ namespace VRF_API.Services
         Task<ApiResponse> GSTNumberCheck(string gstNumber);
         Task<ApiResponse> NextPageCheck(string gstNumber, int page);
         List<State> GetStatesByCountry(string country);
-        Task<ApiResponse> SaveDraft(int Page, FormDataModel formData, UploadedFilesModel files);
+        Task<ApiResponse> SaveDraft(int Page, bool reApply, FormDataModel formData, UploadedFilesModel files);
         Task<bool> VerifyOTP(VerifyOtpRequest request);
         Task<bool> SendOTP(SendOtpRequest request);
         Task<SubmitVendorResult> SubmitVendor(SubmitVendorRequest request);
@@ -2062,6 +2062,7 @@ namespace VRF_API.Services
 
         public async Task<ApiResponse> SaveDraft(
            int page,
+           bool reApply,
            FormDataModel model,
            UploadedFilesModel uploadedFiles)
         {
@@ -2162,7 +2163,7 @@ namespace VRF_API.Services
                     id =
                         await GetNextId();
                 }
-
+                _sessionManager.Set("ReApply", reApply == true ? "true":"false");
 
                 // -------------------------------------------------
                 // OPEN HANA CONNECTION
@@ -2508,11 +2509,18 @@ namespace VRF_API.Services
         private async Task<string> GetExistingDraftId(
             string gstNumber)
         {
+            //string query = @$"
+            //    SELECT TOP 1 ""Id""
+            //    FROM ""{sDBName}"".""TEC_OLED""
+            //    WHERE ""GstNo"" = ?
+            //    AND IFNULL(""Draft"", 'N') = 'Y'
+            //    ORDER BY ""Id"" DESC";
+
             string query = @$"
                 SELECT TOP 1 ""Id""
                 FROM ""{sDBName}"".""TEC_OLED""
                 WHERE ""GstNo"" = ?
-                AND IFNULL(""Draft"", 'N') = ''
+                AND ""Draft""== 'N' || ""Draft"" ==''
                 ORDER BY ""Id"" DESC";
 
 
@@ -4402,6 +4410,8 @@ namespace VRF_API.Services
     int id,
     FormDataModel model)
         {
+            string reApply = _sessionManager.Get("ReApply");
+            bool isReapply = reApply == "true" ? true : false;
             string query = @$"
         INSERT INTO ""{sDBName}"".""TEC_OLED""
         (
@@ -4704,7 +4714,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@Draft",
-                ""
+                isReapply ? "Y":""
             );
 
             command.Parameters.AddWithValue(

@@ -403,7 +403,7 @@ namespace VRF_API.Repository
         public class SaveDraftRequest
         {
             public int Page { get; set; }
-
+            public bool ReApply { get; set; }
             public FormDataModel FormData { get; set; }
 
             public UploadedFilesModel UploadedFiles { get; set; }

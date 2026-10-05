@@ -165,13 +165,7 @@ namespace VRF_API.Services
                             null
                         );
                     }
-                    if(reApplySts == "Y")
-                    {
-                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "VendorCreation", new
-                        {
-                            Redirect = "VendorCreation"
-                        });
-                    }
+
 
                     // =========================================================
                     // CASE 1:
@@ -215,7 +209,10 @@ namespace VRF_API.Services
                             }
                         );
                     }
-
+                    //if(draft =="Y" || draft == "")
+                    //{
+                    //    return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Failure, "GST Number already exists in the draft", null);
+                    //}
                     // =========================================================
                     // CASE 3:
                     // Draft is empty
@@ -290,7 +287,14 @@ namespace VRF_API.Services
                             null
                         );
                     }
-
+                    if (reApplySts == "")
+                    {
+                        return ApiResponseUtility.GenerateApiResponse(ApiStatusEnum.Success, "VendorCreation", new
+                        {
+                            Redirect = "VendorCreation",
+                            ReApply = "ReApply"
+                        });
+                    }
                     // =========================================================
                     // Any other case
                     // =========================================================
