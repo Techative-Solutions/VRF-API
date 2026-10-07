@@ -1807,7 +1807,7 @@ namespace VRF_API.Services
               $"Id: {Id}",
               functionName
           );
-                        SentMail(toMail, gstNumber, dataTable1.Rows[i]["CardCode"].ToString());
+                        SentMail(toMail, gstNumber, dataTable1.Rows[i]["CardCode"].ToString(), false);
                         log.WriteToLogFile_Debug(
               $"[{functionName}] [EMAIL] - Vendor creation email sent successfully. " +
               $"Id: {Id}",
@@ -1953,7 +1953,7 @@ namespace VRF_API.Services
         private async Task<(bool Success, string Message)> SentMail(
       string toMail,
       string selectedGST,
-      string cardCode)
+      string cardCode, bool watermark)
         {
             const string functionName = "SentMail";
 
@@ -2281,7 +2281,7 @@ namespace VRF_API.Services
                 string htmlContent =
                     db.GenerateVendorHtmlWithData(
                         data,
-                        goods
+                        goods, watermark
                     );
 
                 log.WriteToLogFile_Debug(
@@ -4341,7 +4341,7 @@ namespace VRF_API.Services
                 {
                     mailTemplate = "REJECT";
                     _sessionManager.Set("RejectRemarks", Reason);
-                    SentMail(toMail, GstNumber, "");
+                    SentMail(toMail, GstNumber, "",true);
                     mailTemplate = string.Empty;
 
                 }
@@ -4543,7 +4543,7 @@ namespace VRF_API.Services
 
                    string toMail = GetSingleValue($@"Select ""EmailId"" from ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{GstNumber}'");
                 string agentMail =GetSingleValue($@"Select ""AgencyEmail"" from  ""{sDBName}"".""TEC_OLED"" where ""GstNo"" = '{GstNumber}'");
-                SentMail1(toMail, agentMail, GstNumber, "");
+                SentMail1(toMail, agentMail, GstNumber, "", false);
                 return new ApiResponse
                 {
                     Status = ApiStatusEnum.Success,
@@ -4665,7 +4665,7 @@ namespace VRF_API.Services
   string toMail,
   string agentMail,
   string selectedGST,
-  string cardCode)
+  string cardCode, bool watermark)
         {
             const string functionName = "SentMail1";
 
@@ -4992,7 +4992,7 @@ namespace VRF_API.Services
                 string htmlContent =
                     db.GenerateVendorHtmlWithData(
                         data,
-                        goods
+                        goods,watermark
                     );
 
                 log.WriteToLogFile_Debug(
