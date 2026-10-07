@@ -700,7 +700,7 @@ namespace VRF_API.Services
 
                     if (!request.OtpValid)
                     {
-                        await SentMail(request.FormData, email, request.FormData.PaymentDetails.AgencyEmail);
+                        await SentMail(request.FormData, email, request.FormData.PaymentDetails.AgencyEmail, true);
                     }
 
                     log.WriteToLogFile_Debug(
@@ -784,7 +784,7 @@ namespace VRF_API.Services
         private async Task SentMail(
     FormDataModel formData,
     string toMail,
-    string agentMail)
+    string agentMail, bool watermark)
         {
             const string functionName = "SentMail";
             const string mailTemplate = "DRAFT";
@@ -904,7 +904,14 @@ namespace VRF_API.Services
 
                 data["Date"] =
                     DateTime.Now.ToString("dd/MM/yyyy");
-
+                data["md0With"] = formData.PaymentDetails.MarkDownWithTax0 ?? "";
+                data["md0Without"] = formData.PaymentDetails.MarkDownWithoutTax0 ?? "";
+                data["md5With"] = formData.PaymentDetails.MarkDownWithTax5 ?? "";
+                data["md5Without"] = formData.PaymentDetails.MarkDownWithoutTax5 ?? "";
+                data["md18With"] = formData.PaymentDetails.MarkDownWithTax18 ?? "";
+                data["md18Without"] = formData.PaymentDetails.MarkDownWithoutTax18 ?? "";
+                data["md3With"] = formData.PaymentDetails.MarkDownWithTax3 ?? "";
+                data["md3Without"] = formData.PaymentDetails.MarkDownWithoutTax3 ?? "";
 
                 log.WriteToLogFile_Debug(
                     $"[{functionName}] [PREVIEW] - Vendor preview data built successfully.",
@@ -936,7 +943,7 @@ namespace VRF_API.Services
                 string htmlContent =
                     db.GenerateVendorHtmlWithData(
                         data,
-                        goodsList
+                        goodsList, watermark
                     );
                 log.WriteToLogFile_Debug(
                            $"[{functionName}] [HTML] - Vendor preview HTML generated successfully. " +
@@ -2517,11 +2524,11 @@ namespace VRF_API.Services
             //    ORDER BY ""Id"" DESC";
 
             string query = @$"
-                SELECT TOP 1 ""Id""
-                FROM ""{sDBName}"".""TEC_OLED""
-                WHERE ""GstNo"" = ?
-                AND ""Draft""== 'N' || ""Draft"" ==''
-                ORDER BY ""Id"" DESC";
+    SELECT TOP 1 ""Id""
+    FROM ""{sDBName}"".""TEC_OLED""
+    WHERE ""GstNo"" = ?
+      AND (""Draft"" = 'N' OR ""Draft"" = '' OR ""Draft"" ='Y')
+    ORDER BY ""Id"" DESC";
 
 
             using var connection =
@@ -4479,7 +4486,8 @@ namespace VRF_API.Services
             ""Sstate"",
             ""Scity"",
             ""Szipcode"",
-            ""ContactPerson""
+            ""ContactPerson"",
+            ""DraftApproved""
         )
         VALUES
         (
@@ -4490,8 +4498,7 @@ namespace VRF_API.Services
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?,
-?
+            ?, ?, ?, ?, ?, ?, ?,?,?
         )";
 
             using var command =
@@ -4704,12 +4711,12 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@DeclarationName",
-                 ""
+                 model.DeclarationName ?? ""
             );
 
             command.Parameters.AddWithValue(
                 "@DeclarationDesignation",
-                 ""
+                 model.DeclarationDesignation ?? ""
             );
 
             command.Parameters.AddWithValue(
@@ -4763,7 +4770,7 @@ namespace VRF_API.Services
 
             command.Parameters.AddWithValue(
                 "@VerificationNo",
-                model.MobileNumber ?? ""
+                model.DeclarationMobileNumber ?? ""
             );
 
             // =========================================================
@@ -4852,6 +4859,7 @@ namespace VRF_API.Services
                 "@ContactPerson",
                 model.ContactPerson ?? ""
             );
+            command.Parameters.AddWithValue("@DraftApproved", "");
 
             await command.ExecuteNonQueryAsync();
         }
@@ -6312,23 +6320,23 @@ namespace VRF_API.Services
             // CHECK RE-APPLY
             // ---------------------------------------------------------
 
-            string IsReApply = db.GetSingleValue(
-                $@"SELECT T1.""GstNo""
-   FROM {sDBName}.""TEC_OLED"" T1
-   INNER JOIN {sDBName}.""ApprovalTrace"" T2
-   ON T2.""GstNo"" = T1.""GstNo""
-   WHERE T2.""ReApplySts"" = 'No'
-   AND T2.""GstNo"" = '{gstNumber}'"
-            );
+   //         string IsReApply = db.GetSingleValue(
+   //             $@"SELECT T1.""GstNo""
+   //FROM {sDBName}.""TEC_OLED"" T1
+   //INNER JOIN {sDBName}.""ApprovalTrace"" T2
+   //ON T2.""GstNo"" = T1.""GstNo""
+   //WHERE T2.""ReApplySts"" = 'No'
+   //AND T2.""GstNo"" = '{gstNumber}'"
+   //         );
 
-            if (!string.IsNullOrEmpty(IsReApply))
-            {
-                return ApiResponseUtility.GenerateApiResponse(
-                    ApiStatusEnum.Failure,
-                    "",
-                    null
-                );
-            }
+   //         if (!string.IsNullOrEmpty(IsReApply))
+   //         {
+   //             return ApiResponseUtility.GenerateApiResponse(
+   //                 ApiStatusEnum.Failure,
+   //                 "",
+   //                 null
+   //             );
+   //         }
 
             // ---------------------------------------------------------
             // IF GST EXISTS, GET ALL DETAILS
