@@ -8,18 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <COMReference Include="SAPbobsCOM">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>10</VersionMajor>
-      <Guid>fc8030be-f5d2-4b8e-8f92-44228fe30100</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="DinkToPdf" Version="1.0.8" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -34,8 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="Interop.SAPbobsCOM">
+      <HintPath>..\..\..\..\Priya\PAI\WebPOS_ServiceLayerLatest\GIPOS\bin\Interop.SAPbobsCOM.dll</HintPath>
+    </Reference>
     <Reference Include="Sap.Data.Hana.v4.5">
-      <HintPath>C:\Program Files\sap\hdbclient\ado.net\v4.5\Sap.Data.Hana.v4.5.dll</HintPath>
+      <HintPath>T:\NHFS\LatestDll6\Sap.Data.Hana.v4.5.dll</HintPath>
     </Reference>
   </ItemGroup>
 	<ItemGroup>

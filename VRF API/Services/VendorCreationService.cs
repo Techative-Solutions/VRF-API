@@ -3564,7 +3564,9 @@ namespace VRF_API.Services
                 command.Parameters.AddWithValue("@HSNCode", GetStringProperty(item, "HsnCode"));
                 command.Parameters.AddWithValue("@Brand", GetStringProperty(item, "Brand"));
                 command.Parameters.AddWithValue("@Size", GetStringProperty(item, "Size"));
-                command.Parameters.AddWithValue("@Product", imagePath);
+                command.Parameters.Add(
+            "@Product", OdbcType.VarChar, 200).Value =
+            (object)imagePath ?? DBNull.Value;
                 command.Parameters.AddWithValue("@TaxPercentage", GetStringProperty(item, "TaxPercentage"));
 
                 await command.ExecuteNonQueryAsync();

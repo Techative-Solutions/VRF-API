@@ -706,13 +706,13 @@ namespace VRF_API.Repository
 
         public class MajorGoodsServiceModel
         {
-            public string MaterialDescription { get; set; }
+            public string? MaterialDescription { get; set; }
 
             public string? HsnCode { get; set; }
 
-            public string Brand { get; set; }
+            public string? Brand { get; set; }
 
-            public string Size { get; set; }
+            public string? Size { get; set; }
 
             public string? ImageUpload { get; set; }
         }
