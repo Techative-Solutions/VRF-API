@@ -58,7 +58,7 @@ namespace VRF_API.Controllers
                 return BadRequest("File name is required.");
             }
 
-            var folderPath =_configuration["Folder:ImagePath"];
+            var folderPath = _configuration["Folder:ImagePath"];
 
             var fullPath = Path.Combine(folderPath, fileName);
 
@@ -88,7 +88,7 @@ namespace VRF_API.Controllers
     IFormFile file,
     [FromForm] string documentType,
     [FromForm] int rowIndex)
-        { 
+        {
             if (file == null || file.Length == 0)
             {
                 return BadRequest("No file uploaded.");
@@ -235,7 +235,7 @@ namespace VRF_API.Controllers
             }
             catch (Exception ex)
             {
-                
+
 
                 return StatusCode(
                     500,
@@ -263,7 +263,7 @@ namespace VRF_API.Controllers
             }
             catch (Exception ex)
             {
-               
+
 
                 return BadRequest(
                     ApiResponseUtility.GenerateApiResponse(
@@ -290,7 +290,7 @@ namespace VRF_API.Controllers
             }
             catch (Exception ex)
             {
-               
+
                 return BadRequest(
                     ApiResponseUtility.GenerateApiResponse(
                         ApiStatusEnum.Failure,
@@ -352,7 +352,7 @@ namespace VRF_API.Controllers
         {
             try
             {
-               
+
 
                 var result = await _vendorCreationService.SubmitVendor(request);
 
@@ -366,7 +366,7 @@ namespace VRF_API.Controllers
             }
             catch (Exception ex)
             {
-                
+
                 return BadRequest(
                     ApiResponseUtility.GenerateApiResponse(
                         ApiStatusEnum.Failure,
@@ -424,6 +424,41 @@ namespace VRF_API.Controllers
             }
         }
 
+        [HttpGet("DownloadExcel")]
+        public async Task<IActionResult> DownloadExcel()
+        {
+            try
+            {
+                var result = await _vendorCreationService.DownloadExcelAsync();
 
+                if (result == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Excel file not found."
+                    });
+                }
+
+                return File(
+                    result.Value.Content,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    result.Value.FileName
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while downloading the Excel file."
+                });
+            }
+        }
     }
-}
+    }
