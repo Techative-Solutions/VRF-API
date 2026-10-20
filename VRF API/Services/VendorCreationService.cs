@@ -41,6 +41,7 @@ namespace VRF_API.Services
         Task<SubmitVendorResult> SubmitVendor(SubmitVendorRequest request);
         Task<(bool Success, string Message)> SaveNewProductAsync(
            SaveRequest request);
+        Task<(byte[] Content, string FileName)?> DownloadExcelAsync();
     }
     public class VendorCreationService : IVendorCreationService
     {
@@ -1322,11 +1323,28 @@ namespace VRF_API.Services
             }
         }
 
+        public async Task<(byte[] Content, string FileName)?> DownloadExcelAsync()
+        {
+            string? filePath = _configuration["ExcelSettings:ExcelFilePath"];
 
-        // ============================================================
-        // SEND SMS
-        // ============================================================
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new InvalidOperationException(
+                    "Excel file path is not configured.");
+            }
 
+            if (!File.Exists(filePath))
+            {
+                return null;
+            }
+
+            byte[] fileBytes = await File.ReadAllBytesAsync(filePath);
+
+            string fileName = Path.GetFileName(filePath);
+
+            return (fileBytes, fileName);
+        }
+    
         private async Task SendSMS(
             string mobileNumber,
             string otp)
