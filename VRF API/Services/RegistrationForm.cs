@@ -2195,28 +2195,29 @@ namespace VRF_API.Services
                     data["Discount"] =
                         paymentRow["DisCount"]?.ToString() ?? "";
 
-                    data["md0_with"] =
+                  
+                    data["md0With"] =
                         paymentRow["MarkDownTax0"]?.ToString() ?? "";
 
-                    data["md0_without"] =
+                    data["md0Without"] =
                         paymentRow["MarkDownWithoutTax0"]?.ToString() ?? "";
 
-                    data["md3_with"] =
+                    data["md3With"] =
                         paymentRow["MarkDownTax3"]?.ToString() ?? "";
 
-                    data["md3_without"] =
+                    data["md3Without"] =
                         paymentRow["MarkDownWithoutTax3"]?.ToString() ?? "";
 
-                    data["md5_with"] =
+                    data["md5With"] =
                         paymentRow["MarkDownTax5"]?.ToString() ?? "";
 
-                    data["md5_without"] =
+                    data["md5Without"] =
                         paymentRow["MarkDownWithoutTax5"]?.ToString() ?? "";
 
-                    data["md18_with"] =
+                    data["md18With"] =
                         paymentRow["MarkDownTax18"]?.ToString() ?? "";
 
-                    data["md18_without"] =
+                    data["md18Without"] =
                         paymentRow["MarkDownWithoutTax18"]?.ToString() ?? "";
                 }
                 log.WriteToLogFile_Debug(
@@ -2472,20 +2473,20 @@ namespace VRF_API.Services
                 // =====================================================
 
                 string fromMail =
-                    _configuration["MailSettings:MAILID"] ?? "";
+                    _configuration["Mail:fromMail"] ?? "";
 
                 string username =
-                    _configuration["MailSettings:SMTPUSER"] ?? "";
+                    _configuration["Mail:SMTPUSER"] ?? "";
 
                 string password =
-                    _configuration["MailSettings:SMTPPWD"] ?? "";
+                    _configuration["Mail:SMTPPWD"] ?? "";
 
                 string server =
-                    _configuration["MailSettings:SMTPSERVER"] ?? "";
+                    _configuration["Mail:SMTPSERVER"] ?? "";
 
                 int port =
                     int.TryParse(
-                        _configuration["MailSettings:SMTPPORT"],
+                        _configuration["Mail:SMTPPORT"],
                         out int smtpPort
                     )
                         ? smtpPort
@@ -4907,28 +4908,29 @@ namespace VRF_API.Services
                     data["Discount"] =
                         paymentRow["DisCount"]?.ToString() ?? "";
 
-                    data["md0_with"] =
+
+                    data["md0With"] =
                         paymentRow["MarkDownTax0"]?.ToString() ?? "";
 
-                    data["md0_without"] =
+                    data["md0Without"] =
                         paymentRow["MarkDownWithoutTax0"]?.ToString() ?? "";
 
-                    data["md3_with"] =
+                    data["md3With"] =
                         paymentRow["MarkDownTax3"]?.ToString() ?? "";
 
-                    data["md3_without"] =
+                    data["md3Without"] =
                         paymentRow["MarkDownWithoutTax3"]?.ToString() ?? "";
 
-                    data["md5_with"] =
+                    data["md5With"] =
                         paymentRow["MarkDownTax5"]?.ToString() ?? "";
 
-                    data["md5_without"] =
+                    data["md5Without"] =
                         paymentRow["MarkDownWithoutTax5"]?.ToString() ?? "";
 
-                    data["md18_with"] =
+                    data["md18With"] =
                         paymentRow["MarkDownTax18"]?.ToString() ?? "";
 
-                    data["md18_without"] =
+                    data["md18Without"] =
                         paymentRow["MarkDownWithoutTax18"]?.ToString() ?? "";
                 }
                 log.WriteToLogFile_Debug(
